@@ -27,7 +27,18 @@ mkdir -p "$DIR" && cd "$DIR"
 repo init -u https://android.googlesource.com/kernel/manifest \
           -b "$BRANCH" --no-repo-verify --depth=1
 
-# -c = current branch only, --no-tags = skip tags: both cut download size
-repo sync -c --no-tags -j"$(nproc)" --fail-fast
-
-echo "[OK] Source synced at $DIR"
+# -c = current branch only, --no-tags = skip tags: both cut download size.
+# googlesource.com returns HTTP 429 under high parallelism, and --fail-fast
+# would abort the whole sync on the first one — so use modest parallelism
+# and retry; repo sync resumes, completed projects are not re-downloaded.
+for attempt in 1 2 3 4 5; do
+    echo "[sync] attempt $attempt/5"
+    if repo sync -c --no-tags -j4 --network-timeout=60; then
+        echo "[OK] Source synced at $DIR"
+        exit 0
+    fi
+    echo "[warn] sync failed (likely HTTP 429 rate limit) — backing off 60s"
+    sleep 60
+done
+echo "[ERROR] sync still failing after 5 attempts"
+exit 1
