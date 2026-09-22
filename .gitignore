@@ -1,0 +1,6 @@
+# never commit large binaries / source trees
+base/
+out/
+*.img
+*.lz4
+kernel-shusky/
