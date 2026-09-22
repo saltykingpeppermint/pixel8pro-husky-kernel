@@ -5,15 +5,20 @@ set -euo pipefail
 
 BRANCH="android-gs-shusky-6.1-android16"
 DIR="$HOME/kernel-shusky"
-MIN_FREE_GB=60
+# Host drive that backs the WSL vhdx (WSL lives on D: since the C: incident).
+# `df` inside WSL shows the *virtual* fs and is useless for this check,
+# so we measure the real drive via its drvfs mount instead.
+HOST_MOUNT="/mnt/d"
+MIN_FREE_GB=30
 
-# Refuse to start if the disk hosting us is nearly full (lesson learned).
-AVAIL_GB=$(df -BG --output=avail "$DIR" 2>/dev/null | tail -1 | tr -dc '0-9' || echo 0)
-if [ "${AVAIL_GB:-0}" -lt $MIN_FREE_GB ]; then
-    echo "[ERROR] Only ${AVAIL_GB}GB free at $DIR — need >= ${MIN_FREE_GB}GB."
-    echo "        Free space or move the WSL disk: wsl --manage <distro> --move <path>"
+AVAIL_GB=$(df -BG --output=avail "$HOST_MOUNT" | tail -1 | tr -dc '0-9')
+if [ "${AVAIL_GB:-0}" -lt "$MIN_FREE_GB" ]; then
+    echo "[ERROR] Host drive ($HOST_MOUNT) has only ${AVAIL_GB}GB free."
+    echo "        Need >= ${MIN_FREE_GB}GB for shallow source + build output."
+    echo "        Free space on D: or move the WSL disk: wsl --manage <distro> --move <path>"
     exit 1
 fi
+echo "[guard] ${AVAIL_GB}GB free on host drive — OK"
 
 mkdir -p "$DIR" && cd "$DIR"
 
@@ -22,7 +27,7 @@ if [ ! -d .repo ]; then
               -b "$BRANCH" --no-repo-verify
 fi
 
-# --depth=1: skip git history, the big disk saver
+# --depth=1: skip git history — the big disk saver (~10-15GB vs ~40GB+)
 repo sync -c --no-tags --depth=1 -j"$(nproc)" --fail-fast
 
 echo "[OK] Source synced at $DIR"
