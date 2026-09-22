@@ -22,12 +22,12 @@ echo "[guard] ${AVAIL_GB}GB free on host drive — OK"
 
 mkdir -p "$DIR" && cd "$DIR"
 
-if [ ! -d .repo ]; then
-    repo init -u https://android.googlesource.com/kernel/manifest \
-              -b "$BRANCH" --no-repo-verify
-fi
+# --depth=1 is a repo *init* option (stored in .repo), not a sync option.
+# Re-running init with it is idempotent for an existing checkout.
+repo init -u https://android.googlesource.com/kernel/manifest \
+          -b "$BRANCH" --no-repo-verify --depth=1
 
-# --depth=1: skip git history — the big disk saver (~10-15GB vs ~40GB+)
-repo sync -c --no-tags --depth=1 -j"$(nproc)" --fail-fast
+# -c = current branch only, --no-tags = skip tags: both cut download size
+repo sync -c --no-tags -j"$(nproc)" --fail-fast
 
 echo "[OK] Source synced at $DIR"
