@@ -33,7 +33,7 @@ repo init -u https://android.googlesource.com/kernel/manifest \
 # and retry; repo sync resumes, completed projects are not re-downloaded.
 for attempt in 1 2 3 4 5; do
     echo "[sync] attempt $attempt/5"
-    if repo sync -c --no-tags -j4 --network-timeout=60; then
+    if repo sync -c --no-tags -j4; then
         echo "[OK] Source synced at $DIR"
         exit 0
     fi
