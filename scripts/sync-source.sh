@@ -28,17 +28,18 @@ repo init -u https://android.googlesource.com/kernel/manifest \
           -b "$BRANCH" --no-repo-verify --depth=1
 
 # -c = current branch only, --no-tags = skip tags: both cut download size.
-# googlesource.com returns HTTP 429 under high parallelism, and --fail-fast
-# would abort the whole sync on the first one — so use modest parallelism
-# and retry; repo sync resumes, completed projects are not re-downloaded.
-for attempt in 1 2 3 4 5; do
-    echo "[sync] attempt $attempt/5"
-    if repo sync -c --no-tags -j4; then
+# --no-clone-bundle skips giant clone.bundle downloads (fewer 429 triggers).
+# googlesource returns HTTP 429 under sustained parallel fetching, so:
+# modest parallelism, escalating backoff (60s, 120s, 180s...), more attempts.
+# repo sync resumes — completed fetches are never re-downloaded.
+for attempt in 1 2 3 4 5 6 7 8; do
+    echo "[sync] attempt $attempt/8"
+    if repo sync -c --no-tags -j4 --no-clone-bundle; then
         echo "[OK] Source synced at $DIR"
         exit 0
     fi
-    echo "[warn] sync failed (likely HTTP 429 rate limit) — backing off 60s"
-    sleep 60
+    echo "[warn] sync failed (likely HTTP 429 rate limit) — backing off $((60 * attempt))s"
+    sleep $((60 * attempt))
 done
-echo "[ERROR] sync still failing after 5 attempts"
+echo "[ERROR] sync still failing after 8 attempts"
 exit 1
