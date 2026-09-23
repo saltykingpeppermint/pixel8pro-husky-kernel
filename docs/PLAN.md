@@ -38,6 +38,19 @@
   re-derivable from Google's server (too big for GitHub, already mirrored
   upstream).
 
+- **Second disk scare (D:):** partial sync data carried over from the C: era
+  included **full git histories** (the first attempt ran before `--depth=1`
+  was added; later `repo init --depth=1` does not strip objects already on
+  disk) — `.repo` ballooned to 35 GB, WSL vhdx to 43.8 GB, D: down to 6.5 GB.
+  Also: **WSL vhdx never returns space when files are deleted inside it.**
+  Fixes applied (2026-09-23):
+  - `wsl --manage Ubuntu-24.04 --set-sparse true` → deletions now auto-reclaim
+  - user freed 71 GB on D: → 71.4 GB free, no wipe needed; sync resumed
+  - GitHub mirror idea evaluated and rejected: no mirror of
+    `android-gs-shusky-6.1-android16` exists, and a self-hosted mirror can't
+    fit in a free GitHub account (35 GB objects, >100 MB files) nor reduce
+    local disk usage — Google remains the only source.
+
 ## Resume checklist
 - [ ] `scripts/sync-source.sh` (shallow sync)
 - [ ] `scripts/integrate-kernelsu-next.sh`
