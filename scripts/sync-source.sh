@@ -32,14 +32,15 @@ repo init -u https://android.googlesource.com/kernel/manifest \
 # googlesource returns HTTP 429 under sustained parallel fetching, so:
 # modest parallelism, escalating backoff (60s, 120s, 180s...), more attempts.
 # repo sync resumes — completed fetches are never re-downloaded.
-for attempt in 1 2 3 4 5 6 7 8; do
-    echo "[sync] attempt $attempt/8"
-    if repo sync -c --no-tags -j4 --no-clone-bundle; then
+for attempt in $(seq 1 15); do
+    echo "[sync] attempt $attempt/15"
+    if repo sync -c --no-tags -j2 --no-clone-bundle; then
         echo "[OK] Source synced at $DIR"
         exit 0
     fi
-    echo "[warn] sync failed (likely HTTP 429 rate limit) — backing off $((60 * attempt))s"
-    sleep $((60 * attempt))
+    BO=$((60 * attempt)); [ $BO -gt 600 ] && BO=600
+    echo "[warn] sync failed (likely HTTP 429) — backing off ${BO}s"
+    sleep $BO
 done
-echo "[ERROR] sync still failing after 8 attempts"
+echo "[ERROR] sync still failing after 15 attempts"
 exit 1
