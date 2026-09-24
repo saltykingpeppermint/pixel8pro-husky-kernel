@@ -1,0 +1,160 @@
+diff --git a/dts/zuma-a0-foplp.dts b/dts/zuma-a0-foplp.dts
+index e8be340..74c9c7c 100644
+--- a/dts/zuma-a0-foplp.dts
++++ b/dts/zuma-a0-foplp.dts
+@@ -243,7 +243,7 @@
+ 					type = "active";
+ 				};
+ 				big_control_temp: big-control-temp {
+-					temperature = <95000>; /* millicelsius */
++					temperature = <90000>; /* millicelsius */
+ 					hysteresis = <5000>; /* millicelsius */
+ 					type = "passive";
+ 				};
+@@ -298,7 +298,7 @@
+ 					type = "active";
+ 				};
+ 				mid_control_temp: mid-control-temp {
+-					temperature = <95000>; /* millicelsius */
++					temperature = <90000>; /* millicelsius */
+ 					hysteresis = <5000>; /* millicelsius */
+ 					type = "passive";
+ 				};
+@@ -353,7 +353,7 @@
+ 					type = "active";
+ 				};
+ 				little_control_temp: little-control-temp {
+-					temperature = <100000>; /* millicelsius */
++					temperature = <95000>; /* millicelsius */
+ 					hysteresis = <5000>; /* millicelsius */
+ 					type = "passive";
+ 				};
+@@ -408,7 +408,7 @@
+ 					type = "active";
+ 				};
+ 				gpu_control_temp: gpu-control-temp {
+-					temperature = <100000>; /* millicelsius */
++					temperature = <95000>; /* millicelsius */
+ 					hysteresis = <5000>; /* millicelsius */
+ 					type = "passive";
+ 				};
+diff --git a/dts/zuma-a0-ipop.dts b/dts/zuma-a0-ipop.dts
+index dde35b5..c538856 100644
+--- a/dts/zuma-a0-ipop.dts
++++ b/dts/zuma-a0-ipop.dts
+@@ -243,7 +243,7 @@
+ 					type = "active";
+ 				};
+ 				big_control_temp: big-control-temp {
+-					temperature = <90000>; /* millicelsius */
++					temperature = <85000>; /* millicelsius */
+ 					hysteresis = <5000>; /* millicelsius */
+ 					type = "passive";
+ 				};
+@@ -298,7 +298,7 @@
+ 					type = "active";
+ 				};
+ 				mid_control_temp: mid-control-temp {
+-					temperature = <90000>; /* millicelsius */
++					temperature = <85000>; /* millicelsius */
+ 					hysteresis = <5000>; /* millicelsius */
+ 					type = "passive";
+ 				};
+@@ -353,7 +353,7 @@
+ 					type = "active";
+ 				};
+ 				little_control_temp: little-control-temp {
+-					temperature = <95000>; /* millicelsius */
++					temperature = <90000>; /* millicelsius */
+ 					hysteresis = <5000>; /* millicelsius */
+ 					type = "passive";
+ 				};
+@@ -408,7 +408,7 @@
+ 					type = "active";
+ 				};
+ 				gpu_control_temp: gpu-control-temp {
+-					temperature = <90000>; /* millicelsius */
++					temperature = <85000>; /* millicelsius */
+ 					hysteresis = <5000>; /* millicelsius */
+ 					type = "passive";
+ 				};
+diff --git a/dts/zuma-b0-foplp.dts b/dts/zuma-b0-foplp.dts
+index fc08ac1..72be067 100644
+--- a/dts/zuma-b0-foplp.dts
++++ b/dts/zuma-b0-foplp.dts
+@@ -250,7 +250,7 @@
+ 					type = "active";
+ 				};
+ 				big_control_temp: big-control-temp {
+-					temperature = <95000>; /* millicelsius */
++					temperature = <90000>; /* millicelsius */
+ 					hysteresis = <5000>; /* millicelsius */
+ 					type = "passive";
+ 				};
+@@ -305,7 +305,7 @@
+ 					type = "active";
+ 				};
+ 				mid_control_temp: mid-control-temp {
+-					temperature = <95000>; /* millicelsius */
++					temperature = <90000>; /* millicelsius */
+ 					hysteresis = <5000>; /* millicelsius */
+ 					type = "passive";
+ 				};
+@@ -360,7 +360,7 @@
+ 					type = "active";
+ 				};
+ 				little_control_temp: little-control-temp {
+-					temperature = <100000>; /* millicelsius */
++					temperature = <95000>; /* millicelsius */
+ 					hysteresis = <5000>; /* millicelsius */
+ 					type = "passive";
+ 				};
+@@ -415,7 +415,7 @@
+ 					type = "active";
+ 				};
+ 				gpu_control_temp: gpu-control-temp {
+-					temperature = <100000>; /* millicelsius */
++					temperature = <95000>; /* millicelsius */
+ 					hysteresis = <5000>; /* millicelsius */
+ 					type = "passive";
+ 				};
+diff --git a/dts/zuma-b0-ipop.dts b/dts/zuma-b0-ipop.dts
+index e8d97a3..4a5933d 100644
+--- a/dts/zuma-b0-ipop.dts
++++ b/dts/zuma-b0-ipop.dts
+@@ -250,7 +250,7 @@
+ 					type = "active";
+ 				};
+ 				big_control_temp: big-control-temp {
+-					temperature = <90000>; /* millicelsius */
++					temperature = <85000>; /* millicelsius */
+ 					hysteresis = <5000>; /* millicelsius */
+ 					type = "passive";
+ 				};
+@@ -305,7 +305,7 @@
+ 					type = "active";
+ 				};
+ 				mid_control_temp: mid-control-temp {
+-					temperature = <90000>; /* millicelsius */
++					temperature = <85000>; /* millicelsius */
+ 					hysteresis = <5000>; /* millicelsius */
+ 					type = "passive";
+ 				};
+@@ -360,7 +360,7 @@
+ 					type = "active";
+ 				};
+ 				little_control_temp: little-control-temp {
+-					temperature = <95000>; /* millicelsius */
++					temperature = <90000>; /* millicelsius */
+ 					hysteresis = <5000>; /* millicelsius */
+ 					type = "passive";
+ 				};
+@@ -415,7 +415,7 @@
+ 					type = "active";
+ 				};
+ 				gpu_control_temp: gpu-control-temp {
+-					temperature = <90000>; /* millicelsius */
++					temperature = <85000>; /* millicelsius */
+ 					hysteresis = <5000>; /* millicelsius */
+ 					type = "passive";
+ 				};

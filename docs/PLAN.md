@@ -10,16 +10,26 @@
 ## Key technical facts (researched)
 - Pixel 8 Pro kernel source branch: `android-gs-shusky-6.1-android16`
   (AOSP "Build Pixel kernels" table; includes GKI kernel + Pixel drivers).
+- This manifest keeps the GKI kernel source at **`aosp/`** (not `common/`,
+  which is a tiny BUILD-overlay stub). Device build = Kleaf
+  `//private/devices/google/shusky:zuma_shusky_dist` via `./build_shusky.sh`.
+- **boot.img's kernel is built from `gki_defconfig` alone** (device defconfig
+  fragments apply only to modules) → `CONFIG_KSU` goes in `gki_defconfig`.
+  Wi-Fi/BT modules land in **vendor_dlkm**, thermal trips in **dtb.img**
+  (see `docs/PATCHES.md` for the full flash matrix).
 - LineageOS/AICP do NOT build their own kernel for husky — they boot Google's
   GKI prebuilt → **one kernel Image serves both ROMs**; only the boot.img
   container differs → two packaged outputs, one build.
 - KernelSU-Next integrates via `kernel/setup.sh`; detects `common/drivers`
-  layout (present in this manifest). Requires `CONFIG_KSU` in build config.
+  layout — this tree needed a `common/drivers → ../aosp/drivers` symlink bridge
+  (done). Requires `CONFIG_KSU` in build config (patch 0001, applied).
 - Packaging: Linux magiskboot builds were retired by upstream → use AOSP
   `tools/mkbootimg/{unpack_bootimg,mkbootimg}.py` from the synced tree.
 - Pixel kernels in boot.img are **lz4 legacy** compressed → `lz4 -l`.
 - Flash: `fastboot flash boot …` (bootloader unlocked). Back up original
   boot.img first; wrong KMI/SPL can bootloop (KMI here: `6.1-android14`).
+  Modules use `CONFIG_MODVERSIONS=y` → keep kernel version string compatible
+  if mixing ROM-provided modules (verify `vermagic` after first build).
 
 ## Wi-Fi/BT/heat honesty
 - Mix of software (thermal throttling, Wi-Fi power-save, firmware crash
@@ -52,10 +62,20 @@
     local disk usage — Google remains the only source.
 
 ## Resume checklist
-- [ ] `scripts/sync-source.sh` (shallow sync)
-- [ ] `scripts/integrate-kernelsu-next.sh`
-- [ ] Inspect tree → write `patches/` (Wi-Fi PS off, thermal, crash handling)
-- [ ] Enable `CONFIG_KSU`, build with `BUILD_AOSP_KERNEL=1 ./build_husky.sh`
+- [x] `scripts/sync-source.sh` / `final-sync.sh` — sync complete 2026-09-24
+      (rc=0, all 82 projects, shallow clang fetch, 0 garbage)
+- [x] `scripts/integrate-kernelsu-next.sh` — KernelSU-Next **v3.4.0** integrated
+- [x] Inspect tree → write `patches/` — **3 patches written, verified, committed**
+      (`docs/PATCHES.md`: 0001 CONFIG_KSU, 0002 Wi-Fi PM_OFF, 0003 thermal −5 °C)
+- [ ] Kleaf build: `BUILD_AOSP_KERNEL=1 ./build_shusky.sh` (8 cores; watch RAM,
+      D: free space) + verify vermagic vs stock
 - [ ] Drop `base/stock-boot.img` (Google factory image) and `base/aicp-boot.img`
-      (AICP zip) → `scripts/package-bootimgs.sh`
+      (AICP zip) → `scripts/package-bootimgs.sh`; verify dtb/dtbo/vendor_dlkm
+      flash targets against the factory flash-all script
 - [ ] Flash both variants, test Wi-Fi/BT under heat load
+
+## Status (2026-09-24)
+- Source tree complete (22 GB), KernelSU-Next in, all three patches applied &
+  committed in-tree (aosp `bf8815155c98`, bcm4398 `cdf02d5`, zuma `ebc7b94`).
+- Patch files mirrored in project repo `patches/`.
+- Next: build → obtain the two base boot.imgs → package → flash.

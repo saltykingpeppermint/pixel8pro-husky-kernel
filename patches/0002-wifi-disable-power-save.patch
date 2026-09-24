@@ -1,0 +1,35 @@
+diff --git a/dhd_linux.c b/dhd_linux.c
+index 9953f46..d46d0cf 100644
+--- a/dhd_linux.c
++++ b/dhd_linux.c
+@@ -11483,7 +11483,7 @@ dhd_optimised_preinit_ioctls(dhd_pub_t * dhd)
+ 	uint32 enable_memuse = 1;
+ #endif /* DHD_BUS_MEM_ACCESS */
+ #ifdef DHD_PM_CONTROL_FROM_FILE
+-	uint power_mode = PM_FAST;
++	uint power_mode = PM_OFF;
+ #endif /* DHD_PM_CONTROL_FROM_FILE */
+ 	char buf[WLC_IOCTL_SMLEN];
+ 	char *ptr;
+@@ -12405,7 +12405,7 @@ dhd_legacy_preinit_ioctls(dhd_pub_t *dhd)
+ #ifdef DHD_ENABLE_LPC
+ 	uint32 lpc = 1;
+ #endif /* DHD_ENABLE_LPC */
+-	uint power_mode = PM_FAST;
++	uint power_mode = PM_OFF;
+ #if defined(BCMSDIO)
+ 	uint32 dongle_align = DHD_SDALIGN;
+ 	uint32 glom = CUSTOM_GLOM_SETTING;
+diff --git a/wl_cfg80211.c b/wl_cfg80211.c
+index 4d943cd..5ce14c2 100644
+--- a/wl_cfg80211.c
++++ b/wl_cfg80211.c
+@@ -10252,7 +10252,7 @@ wl_apply_per_sta_conn_suspend_settings(struct bcm_cfg80211 *cfg,
+ 
+ #ifndef SUPPORT_PM2_ONLY
+ 	{
+-		u32 power_mode = suspend ? PM_MAX : PM_FAST;
++		u32 power_mode = suspend ? PM_MAX : PM_OFF;
+ 		wldev_ioctl_no_wl(dev, WLC_SET_PM, &power_mode, sizeof(u32), TRUE);
+ 	}
+ #endif /* SUPPORT_PM2_ONLY */
