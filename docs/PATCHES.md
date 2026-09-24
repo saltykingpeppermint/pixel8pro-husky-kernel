@@ -11,7 +11,7 @@ idempotently after a fresh sync.
 |---|-------|-------|----------|---------|
 | 0001 | `CONFIG_KSU=y` | `aosp/arch/arm64/configs/gki_defconfig` | **boot.img** (kernel) | KernelSU-Next v3.4.0 built-in root |
 | 0002 | Wi-Fi power-save off | `bcm4398/dhd_linux.c`, `bcm4398/wl_cfg80211.c` | **vendor_dlkm** (`bcmdhd4398.ko`) | Stable Wi-Fi link under heat |
-| 0003 | Thermal −5 °C | 4 × `zuma-{a0,b0}-{ipop,foplp}.dts` | **dtb.img** (device tree) | Cooler CPU/GPU peaks |
+| 0003 | Thermal −5 °C | 4 × `zuma-{a0,b0}-{ipop,foplp}.dts` | **dtbo.img** (base DTBs live inside the dtbo image) | Cooler CPU/GPU peaks |
 
 ## Why the patches land in different images
 
@@ -25,15 +25,21 @@ The Pixel 8 Pro kernel build (Kleaf) splits one build across several flash targe
   `bcmdhd4398.ko` (Wi-Fi), `bluetooth.broadcom`, touch/NFC/GPS…
   → patch 0002 lives here. (`bcmdhd4398` is blocklisted from auto-load and
   explicitly `modprobe`d via `insmod_cfg/init.insmod.husky.cfg`.)
-- **dtb.img / dtbo** — base SoC device tree where the thermal zones/trips are
-  defined. → patch 0003 lives here.
+- **dtbo.img** — contains the base SoC device trees (where the thermal
+  zones/trips are defined) *plus* the board overlay. husky has **no `dtb`
+  partition** (verified against the factory image's `fastboot-info.txt`), so
+  the built DTBs ship inside the dtbo partition image. → patch 0003 lives here.
 - **vendor_boot / vendor_kernel_boot** (vendor ramdisk) — early SoC modules
   (`gs_thermal.ko` TMU driver, `exynos-acme.ko` cpufreq, battery, display…).
 
-Flashing plan (to be finalized against the stock factory image's flash-all script):
+Flashing plan (verified against the stock factory image's `fastboot-info.txt`):
 `fastboot flash boot` is required for root (0001). 0002 and 0003 take effect when
-their companion images are flashed too (`vendor_dlkm` in fastbootd, `dtbo`/`dtb`
-partition — exact partition names verified in the packaging step).
+their companion images are flashed too: `fastboot flash dtbo dtbo.img` (0003) and
+`fastboot flash vendor_dlkm vendor_dlkm.img` from fastbootd
+(`fastboot reboot fastboot` first — vendor_dlkm is a logical partition inside
+`super`). Stock flash list: boot, init_boot, dtbo, vendor_kernel_boot, pvmfw,
+vendor_boot, vbmeta (`--apply-vbmeta`), vbmeta_system, vbmeta_vendor, then super
+logicals (system, system_dlkm, system_ext, product, vendor, vendor_dlkm).
 
 ## 0001 — CONFIG_KSU=y
 

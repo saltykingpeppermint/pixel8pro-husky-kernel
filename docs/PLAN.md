@@ -61,21 +61,51 @@
     fit in a free GitHub account (35 GB objects, >100 MB files) nor reduce
     local disk usage — Google remains the only source.
 
+- **WSL boot failure (2026-09-24):** two concurrent `wsl` invocations on a
+  cold VM wedged the stack — every later boot died with
+  `HCS_E_CONNECTION_TIMEOUT` ("no response from the virtual machine").
+  Diagnosis (fresh Alpine test distro booted instantly) isolated it to
+  Ubuntu-24.04's systemd path: last-boot dmesg showed
+  `WaitForBootProcess: /sbin/init failed to start within 10000ms` — systemd
+  crashed mid-boot at the double-launch (dirty journals), then every retry
+  outran WSL's hard 10 s boot window (self-reinforcing). Fix:
+  `systemd=false` in `/etc/wsl.conf` (build box doesn't need systemd).
+  vhdx fs healthy (rw mount + journal replay OK; full e2fsck still pending —
+  Pass1 too slow on D: drive, do it from `WslTest` when idle).
+  Notes: `.wslconfig` has `networkingMode=virtioproxy` still commented out
+  (NAT used during repair, proven working; NOT the cause; re-enable after
+  build). Rescue distro `WslTest` (Alpine) kept for fs maintenance
+  (`wsl --unregister WslTest` to remove). **Lesson: never launch concurrent
+  `wsl` boots on a cold VM — serialize them.**
+
 ## Resume checklist
 - [x] `scripts/sync-source.sh` / `final-sync.sh` — sync complete 2026-09-24
       (rc=0, all 82 projects, shallow clang fetch, 0 garbage)
 - [x] `scripts/integrate-kernelsu-next.sh` — KernelSU-Next **v3.4.0** integrated
 - [x] Inspect tree → write `patches/` — **3 patches written, verified, committed**
       (`docs/PATCHES.md`: 0001 CONFIG_KSU, 0002 Wi-Fi PM_OFF, 0003 thermal −5 °C)
-- [ ] Kleaf build: `BUILD_AOSP_KERNEL=1 ./build_shusky.sh` (8 cores; watch RAM,
-      D: free space) + verify vermagic vs stock
-- [ ] Drop `base/stock-boot.img` (Google factory image) and `base/aicp-boot.img`
-      (AICP zip) → `scripts/package-bootimgs.sh`; verify dtb/dtbo/vendor_dlkm
-      flash targets against the factory flash-all script
+- [x] Base images obtained 2026-09-24: `base/aicp-boot.img` (adb root,
+      dd of boot_a slot — 64 MB, `ANDROID!` magic ✓) + factory image
+      sha256-verified & extracted →
+      `D:\pixel8pro-factory\out\husky_beta-bp31.250610.009\`
+      (boot.img, dtbo.img, vbmeta{,_system,_vendor}.img, android-info.txt)
+- [ ] Kleaf build **RUNNING** (2026-09-24, `./build_shusky.sh --jobs=5`)
+      → verify vermagic vs stock; also record which dtb/dtbo/vendor_dlkm
+      artifacts the dist emits
+- [ ] `scripts/package-bootimgs.sh` → two boot.imgs. Factory flash list
+      (fastboot-info.txt): boot, init_boot, dtbo, vendor_kernel_boot, pvmfw,
+      vendor_boot, vbmeta (`--apply-vbmeta`), vbmeta_system, vbmeta_vendor,
+      then super logicals incl. **vendor_dlkm** — **no dtb partition exists**
+      → base DTBs ship inside `dtbo.img` → patch 0003 rides our built
+      dtbo.img (confirm vs dist output)
 - [ ] Flash both variants, test Wi-Fi/BT under heat load
 
 ## Status (2026-09-24)
 - Source tree complete (22 GB), KernelSU-Next in, all three patches applied &
   committed in-tree (aosp `bf8815155c98`, bcm4398 `cdf02d5`, zuma `ebc7b94`).
 - Patch files mirrored in project repo `patches/`.
-- Next: build → obtain the two base boot.imgs → package → flash.
+- WSL repaired after boot-failure incident (see Incidents) — `systemd=false`.
+- Both base images in hand (AICP via adb, stock factory verified+extracted).
+- **Kleaf build running** (`./build_shusky.sh --jobs=5`, background).
+- Next: build → verify vermagic → package both boot.imgs + companion images
+  → flash instructions (with hardware-vs-software Wi-Fi caveat).
