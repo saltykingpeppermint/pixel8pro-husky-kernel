@@ -10,13 +10,18 @@ packaged `boot.img` variants).
 > patches only remove the software-side failure modes (power-save wedges under
 > heat, late thermal mitigation). See `docs/FLASHING.md` §5.
 
+> **Ready-made flash set:** images, SHA-256 checksums and the official
+> KernelSU-Next manager APK are attached to the
+> [v1.0.0 release](https://github.com/saltykingpeppermint/pixel8pro-husky-kernel/releases/tag/v1.0.0)
+> — with test instructions for telling a software Wi-Fi drop from a hardware one.
+
 ## What's changed (3 patches)
 
 | Patch | Effect | Where it lands |
 |-------|--------|----------------|
 | KernelSU-Next v3.4.0 built-in | root without an LKM | `boot.img` kernel |
 | Wi-Fi power-save → `PM_OFF` while active (`PM_MAX` on suspend) | no PS-poll dropouts when hot (~100–200 mW idle cost) | `vendor_dlkm` (`bcmdhd4398.ko`) |
-| Passive thermal trips −5 °C (safety trips untouched) | cooler peaks (~5 % sustained perf) | `dtbo.img` + `vendor_kernel_boot` DTBs |
+| Passive thermal trips −5 °C (safety trips untouched) | cooler peaks (~5 % sustained perf) | `vendor_kernel_boot` packed `dtb` (4 FDTs; `dtbo.img` carries no trips) |
 
 Full rationale + verification details: **`docs/PATCHES.md`**.
 
