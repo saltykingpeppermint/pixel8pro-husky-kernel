@@ -122,28 +122,38 @@
       sha256-verified & extracted →
       `D:\pixel8pro-factory\out\husky_beta-bp31.250610.009\`
       (boot.img, dtbo.img, vbmeta{,_system,_vendor}.img, android-info.txt)
-- [ ] **Source build** running under `scripts/monitor-wsl.ps1` (pwsh,
-      `scripts/build-wrapper.sh` → `./build_shusky.sh --jobs=5
-      --config=use_source_tree_aosp`, `BUILD_EXIT=` protocol; failed attempt 1
-      = savedefconfig-canonical, fixed via revert `51d090c67d6e`)
-- [ ] `scripts/verify-final.sh` — Image UTS == aosp HEAD, `CONFIG_KSU=y`
-      (ikconfig), module vermagics, wifi/thermal patches, KMI violations
-- [ ] `scripts/package-bootimgs.sh` → two boot.imgs **+ copies companion
-      images** (dtbo, system_dlkm, vendor_dlkm, vendor_kernel_boot) into
-      `out/`; hard-guards against packaging a kernel without CONFIG_KSU
+- [x] **Source build: BUILD_OK 2026-09-25 08:05:31** (`out/build.log`
+      `BUILD_EXIT=0`; monitor hardening along the way: detached `setsid`
+      launch survives harness restarts, two-strike liveness, attempts only
+      counted on confirmed starts, stall watchdog; savedefconfig-canonical
+      failure fixed via revert `51d090c67d6e`)
+- [x] `scripts/verify-final.sh` — **VERIFY_OK**: Image UTS
+      `6.1.124-android14-11-g51d090c67d6e` == aosp HEAD, `CONFIG_KSU=y`
+      (ikconfig, 398 KSU strings), 5 vermagics match, wifi source patched
+      (dhd=2, wl=1, ko newer), all 16 thermal trips −5 °C (foplp
+      90/90/95/95, ipop 85/85/90/85), fips load-lists clean
+      (fixed: pinned bcm4398 path — `find` grabbed bcm4389 — and ipop GPU
+      expects 85000, which the DTB correctly carries)
+- [x] `scripts/package-bootimgs.sh` → `out/boot-aicp.img` +
+      `out/boot-stock.img` (header v4, pagesize 4096, cmdline/ramdisk carried
+      from base, lz4-**legacy** frame; round-trip verified: kernel_size ==
+      ours, banner + `CONFIG_KSU=y` inside) **+ companion copies** (dtbo,
+      system_dlkm, vendor_dlkm, vendor_kernel_boot) in `out/`
 - [ ] Flash both variants, test Wi-Fi/BT under heat load
-      (`docs/FLASHING.md` written: flash set, backups, rollback, caveats)
+      (`docs/FLASHING.md` written: flash set, backups, rollback, caveats;
+      AICP set already pushed to `/sdcard/Download/kernel-flash/`, all 5
+      MD5-verified against PC copies)
 
-## Status (2026-09-24, 22:55)
-- Source tree complete (22 GB), KernelSU-Next v3.4.0 in-tree, patches
-  committed: aosp hooks `392e8c74c971` (defconfig entry reverted
-  `51d090c67d6e` — KSU via Kconfig `default y`), bcm4398 `cdf02d5`,
-  zuma `ebc7b94`.
-- **Source build attempt 2 RUNNING** under the monitor (config check passed
-  at ~22:56; attempt limit 3; log `out/build.log`, watchdog `out/monitor.log`).
-- Docs: `docs/FLASHING.md` written; PATCHES/PLAN updated (prebuilt trap +
-  canonical-defconfig incident).
-- Packaging script hardened (dist-Image pin + CONFIG_KSU guard + companions).
-- Pending: BUILD_OK → `verify-final.sh` → `package-bootimgs.sh` → commit+push
-  scripts/docs → cleanup (`.wslconfig` virtioproxy restore, unregister
-  WslTest) → delivery message (flash steps + honest caveats).
+## Status (2026-09-25, 09:15)
+- **Pipeline COMPLETE**: build (08:05:31 `BUILD_EXIT=0`) → verify
+  (VERIFY_OK) → package (both boots + 4 companions, round-trip verified) →
+  commit+push (`38f4f3a` docs+patches, `4ff1d04` scripts → origin/main) →
+  cleanup (WslTest unregistered, rescue/fsck path retired).
+- AICP flash set on the phone: `/sdcard/Download/kernel-flash/` —
+  boot-aicp.img, dtbo.img, vendor_kernel_boot.img, system_dlkm.img,
+  vendor_dlkm.img (MD5 identical to PC `out/` copies).
+- Incident log: host restarts killed attached builds twice → detached
+  launch; probe flakes caused duplicate launches → two-strike liveness;
+  WSL service crash (E_UNEXPECTED) → fsck clean, rebuilt fine.
+- Remaining: **user flashes per `docs/FLASHING.md`** (backups first), then
+  heat-load Wi-Fi/BT test; review the honest caveats before flashing.
