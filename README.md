@@ -1,62 +1,47 @@
-# Pixel 8 Pro Custom Kernel (husky)
+# Pixel 8 Pro (husky) custom kernel — KernelSU-Next + Wi-Fi/heat patches
 
-Custom kernel project for **Google Pixel 8 Pro (husky)** addressing Wi-Fi/Bluetooth
-failures caused by heat and software, with **KernelSU-Next** root built in.
+Custom kernel build for the **Google Pixel 8 Pro (husky)** targeting the
+heat-related Wi-Fi/Bluetooth problems, with **KernelSU-Next built in**, for
+**AICP/LineageOS-based ROMs and the stock Google ROM** (one kernel build, two
+packaged `boot.img` variants).
 
-## Target
+> **Honest caveat up front:** if your Wi-Fi failure is *hardware* (the Wi-Fi
+> IC's solder cracking — “works when cold”), **no kernel can fix it**. These
+> patches only remove the software-side failure modes (power-save wedges under
+> heat, late thermal mitigation). See `docs/FLASHING.md` §5.
 
-| Item | Value |
-|---|---|
-| Device | Google Pixel 8 Pro (`husky`), Tensor G3 |
-| ROM (primary) | AICP (LineageOS-based), Android 16 build |
-| ROM (secondary) | Stock Google firmware |
-| Kernel source | `android-gs-shusky-6.1-android16` (GKI `android14-6.1`) |
-| Root | KernelSU-Next compiled into the kernel (single `boot.img` flash) |
-| Output | Two flashable `boot.img` files: stock-based + AICP-based |
+## What's changed (3 patches)
 
-## Important caveat
+| Patch | Effect | Where it lands |
+|-------|--------|----------------|
+| KernelSU-Next v3.4.0 built-in | root without an LKM | `boot.img` kernel |
+| Wi-Fi power-save → `PM_OFF` while active (`PM_MAX` on suspend) | no PS-poll dropouts when hot (~100–200 mW idle cost) | `vendor_dlkm` (`bcmdhd4398.ko`) |
+| Passive thermal trips −5 °C (safety trips untouched) | cooler peaks (~5 % sustained perf) | `dtbo.img` + `vendor_kernel_boot` DTBs |
 
-The widely reported Pixel 8 Pro Wi-Fi/BT failure when hot has **two causes**:
-
-1. **Software** (what this kernel targets): thermal throttling behavior, Wi-Fi
-   power-save, driver/firmware crash handling.
-2. **Hardware** (not fixable in software): failed solder joints under the Wi-Fi
-   IC — the "works when ice-cold" symptom. If the unit has this fault, no
-   kernel will fix it.
-
-## Status
-
-- [x] Research: GKI/KMI, KernelSU-Next integration, packaging approach
-- [x] Build environment: WSL Ubuntu 24.04 toolchain installed
-- [x] Build machine relocated: WSL virtual disk moved C: → D: (disk space scare)
-- [ ] Shallow `repo sync` of kernel source (interrupted — resume here)
-- [ ] Integrate KernelSU-Next (`kernel/setup.sh`)
-- [ ] Wi-Fi/BT/thermal patches (inspect tree first, then patch)
-- [ ] Kleaf build (`BUILD_AOSP_KERNEL=1 ./build_husky.sh`)
-- [ ] Package `boot.img` ×2 via AOSP `unpack_bootimg`/`mkbootimg`
-- [ ] Flash & verify (unlocked bootloader)
-
-## Resume (from a fresh WSL session)
-
-```bash
-# 1. shallow source sync (no git history = ~1/3 the disk usage)
-mkdir -p ~/kernel-shusky && cd ~/kernel-shusky
-repo init -u https://android.googlesource.com/kernel/manifest \
-          -b android-gs-shusky-6.1-android16 --no-repo-verify
-repo sync -c --no-tags --depth=1 -j8
-
-# 2. KernelSU-Next integration
-curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
-
-# 3. build (patch scripts live in patches/)
-BUILD_AOSP_KERNEL=1 ./build_husky.sh
-```
-
-**Disk rule of thumb:** kernel shallow source ≈ 10–15 GB + build output ≈
-10–20 GB. Keep ≥ 60 GB free on the drive hosting WSL before syncing.
+Full rationale + verification details: **`docs/PATCHES.md`**.
 
 ## Layout
 
-- `patches/` — Wi-Fi/BT/thermal kernel patches (created once source is inspected)
-- `scripts/` — build + packaging helpers
-- `out/` — final flashable images land here
+- `docs/PLAN.md` — decisions, incidents, build state
+- `docs/PATCHES.md` — the three patches in detail
+- `docs/FLASHING.md` — backups, flash commands, verification, rollback, caveats
+- `scripts/` — sync, integrate, patch, build (monitor + wrapper), verify,
+  package helpers (all heavy bash lives in files, never inline)
+- `patches/` — regenerated patch files for re-applying after a fresh sync
+- `base/` — original boot.img backups (git-ignored)
+
+The kernel source itself is **not** in this repo — it is Google's
+`android-gs-shusky-6.1-android16` (GKI `android14-6.1`) synced with
+`repo`, too large for GitHub. Build:
+
+```sh
+./build_shusky.sh --jobs=5 --config=use_source_tree_aosp
+```
+
+`--config=use_source_tree_aosp` is **mandatory** — the default path downloads
+Google's prebuilt GKI, which has no KernelSU and mismatched module vermagic.
+
+## Status
+
+See `docs/PLAN.md` § Status. Flash images are produced by
+`scripts/verify-final.sh` + `scripts/package-bootimgs.sh` after a green build.

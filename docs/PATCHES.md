@@ -9,9 +9,9 @@ idempotently after a fresh sync.
 
 | # | Patch | Files | Lands in | Purpose |
 |---|-------|-------|----------|---------|
-| 0001 | `CONFIG_KSU=y` | `aosp/arch/arm64/configs/gki_defconfig` | **boot.img** (kernel) | KernelSU-Next v3.4.0 built-in root |
+| 0001 | KernelSU built-in | `aosp` (Kconfig/Makefile hooks) + KernelSU-Next `default y` | **boot.img** (kernel) | KernelSU-Next v3.4.0 built-in root |
 | 0002 | Wi-Fi power-save off | `bcm4398/dhd_linux.c`, `bcm4398/wl_cfg80211.c` | **vendor_dlkm** (`bcmdhd4398.ko`) | Stable Wi-Fi link under heat |
-| 0003 | Thermal −5 °C | 4 × `zuma-{a0,b0}-{ipop,foplp}.dts` | **dtbo.img** (base DTBs live inside the dtbo image) | Cooler CPU/GPU peaks |
+| 0003 | Thermal −5 °C | 4 × `zuma-{a0,b0}-{ipop,foplp}.dts` | **dtbo.img** + **vendor_kernel_boot/dtb** (base DTBs ride both; husky has no `dtb` partition) | Cooler CPU/GPU peaks |
 
 ## Why the patches land in different images
 
@@ -41,13 +41,29 @@ their companion images are flashed too: `fastboot flash dtbo dtbo.img` (0003) an
 vendor_boot, vbmeta (`--apply-vbmeta`), vbmeta_system, vbmeta_vendor, then super
 logicals (system, system_dlkm, system_ext, product, vendor, vendor_dlkm).
 
-## 0001 — CONFIG_KSU=y
+## 0001 — KernelSU built into the kernel
 
 KernelSU-Next v3.4.0 was integrated by upstream `setup.sh` (drivers Makefile +
 Kconfig hooks, `aosp/drivers/kernelsu -> ../../KernelSU-Next/kernel`, bridged via
 a `common/drivers` symlink because this tree keeps the GKI source at `aosp/`).
-Adding `CONFIG_KSU=y` compiles it into `vmlinux` → root from a single boot.img
-flash, no LKM.
+
+**How CONFIG_KSU ends up =y — the defconfig entry was reverted (2026-09-24):**
+KernelSU-Next's Kconfig declares `config KSU … default y` (tristate, deps
+`KPROBES && EXT4_FS`, both =y in `gki_defconfig`). An explicit `CONFIG_KSU=y`
+line in `gki_defconfig` is therefore *redundant*, and Kleaf's `KernelConfig`
+action enforces that `gki_defconfig` be byte-identical to `make savedefconfig`
+output — `savedefconfig` drops value==default entries, so the appended block
+(comment + blank line + `CONFIG_KSU=y`) failed the build with
+`ERROR: savedefconfig does not match aosp/arch/arm64/configs/gki_defconfig`.
+Fix: reverted the defconfig commit (`51d090c67d6e`); KSU resolves to `=y`
+purely via its Kconfig default, and the canonical check passes. Verified
+locally: `make gki_defconfig` → `.config` contains `CONFIG_KSU=y`.
+
+**Critical: this only works on the source build.** The default path downloads
+Google's *prebuilt* GKI (`device.bazelrc`: `use_prebuilt_gki=true` + Kleaf
+download map), which has no KernelSU and a different vermagic. The build
+**must** pass `--config=use_source_tree_aosp`
+(`scripts/build-wrapper.sh` does).
 
 Build notes:
 - If the build enforces the frozen KMI symbol list, run `update_symbol_list.sh`
@@ -108,3 +124,10 @@ git -C private/google-modules/wlan/bcm4398 apply patches/0002-...patch
 git -C private/devices/google/zuma         apply patches/0003-...patch
 ```
 or simply re-run `scripts/apply-patches.sh` (idempotent; also rebuilds the patch files).
+
+> **Note (2026-09-24):** `patches/0001-gki_defconfig-CONFIG_KSU.patch` is
+> **superseded** — do NOT re-add the defconfig entry (it breaks Kleaf's
+> savedefconfig-canonical check; KSU is enabled by its Kconfig `default y`).
+> The still-required part of 0001 is the drivers Kconfig/Makefile hook commit
+> (`392e8c74c971` in `aosp/`), regenerated as a patch by
+> `scripts/apply-patches.sh`.

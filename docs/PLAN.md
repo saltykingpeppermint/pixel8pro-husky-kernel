@@ -78,6 +78,39 @@
   (`wsl --unregister WslTest` to remove). **Lesson: never launch concurrent
   `wsl` boots on a cold VM — serialize them.**
 
+- **3× BSOD (2026-09-24, bugcheck 0x3B SYSTEM_SERVICE_EXCEPTION, same fault
+  offset):** all three traced to abnormal termination of Hyper-V compute
+  components (force-killing `vmcompute`/`vmwp` during repair playbooks).
+  Hard rule adopted: **never kill `vmwp`/`vmmem`/`vmcompute`** — safe paths
+  only (`wsl --shutdown`, `WslService` recycle, `Restart-Service vmcompute`).
+  Monitor playbook rewritten around this; fsck then ran clean.
+
+- **Prebuilt-vs-source trap (2026-09-24, the key discovery):** the default
+  Kleaf path (`device.bazelrc` → `use_prebuilt_gki=true` + Kleaf download map)
+  *downloads* Google's GKI — the "successful" first build produced a dist
+  whose `Image` was `6.1.124-…-g8d713f9e8e7b-ab13202960` (no KernelSU,
+  vermagic from a different build than our device modules, fips140.ko from a
+  third identity). Full vermagic matrix recorded; conclusion: mixed dist was
+  unflashable. Supported override: `--config=use_source_tree_aosp`
+  (`--kernel_package=@//aosp --use_prebuilt_gki=false --use_signed_prebuilts=false`).
+  All builds now go through `scripts/build-wrapper.sh`, which passes it and
+  self-logs `BUILD_EXIT=<rc>` as the authoritative outcome.
+
+- **savedefconfig-canonical failure (2026-09-24):** first source-build attempt
+  died at Kleaf's `KernelConfig` action:
+  `ERROR: savedefconfig does not match aosp/arch/arm64/configs/gki_defconfig`
+  — the appended `CONFIG_KSU=y` block was dropped by `savedefconfig` because
+  KernelSU-Next's Kconfig has `default y` (redundant entry; comments are never
+  canonical either). Fix: reverted the defconfig commit (`51d090c67d6e`);
+  `CONFIG_KSU=y` still resolves via the Kconfig default (deps
+  `KPROBES=y`+`EXT4_FS=y` confirmed in `gki_defconfig`), and the canonical
+  check now passes (build proceeded to full compile).
+
+- **Monitor 5.1 crash (2026-09-24):** watchdog started with `powershell.exe`
+  (5.1/.NET Framework) died instantly — `ProcessStartInfo.ArgumentList` only
+  exists on PowerShell 7. Fixed with a version guard + always launching via
+  `pwsh -NoProfile -File`.
+
 ## Resume checklist
 - [x] `scripts/sync-source.sh` / `final-sync.sh` — sync complete 2026-09-24
       (rc=0, all 82 projects, shallow clang fetch, 0 garbage)
@@ -89,23 +122,28 @@
       sha256-verified & extracted →
       `D:\pixel8pro-factory\out\husky_beta-bp31.250610.009\`
       (boot.img, dtbo.img, vbmeta{,_system,_vendor}.img, android-info.txt)
-- [ ] Kleaf build **RUNNING** (2026-09-24, `./build_shusky.sh --jobs=5`)
-      → verify vermagic vs stock; also record which dtb/dtbo/vendor_dlkm
-      artifacts the dist emits
-- [ ] `scripts/package-bootimgs.sh` → two boot.imgs. Factory flash list
-      (fastboot-info.txt): boot, init_boot, dtbo, vendor_kernel_boot, pvmfw,
-      vendor_boot, vbmeta (`--apply-vbmeta`), vbmeta_system, vbmeta_vendor,
-      then super logicals incl. **vendor_dlkm** — **no dtb partition exists**
-      → base DTBs ship inside `dtbo.img` → patch 0003 rides our built
-      dtbo.img (confirm vs dist output)
+- [ ] **Source build** running under `scripts/monitor-wsl.ps1` (pwsh,
+      `scripts/build-wrapper.sh` → `./build_shusky.sh --jobs=5
+      --config=use_source_tree_aosp`, `BUILD_EXIT=` protocol; failed attempt 1
+      = savedefconfig-canonical, fixed via revert `51d090c67d6e`)
+- [ ] `scripts/verify-final.sh` — Image UTS == aosp HEAD, `CONFIG_KSU=y`
+      (ikconfig), module vermagics, wifi/thermal patches, KMI violations
+- [ ] `scripts/package-bootimgs.sh` → two boot.imgs **+ copies companion
+      images** (dtbo, system_dlkm, vendor_dlkm, vendor_kernel_boot) into
+      `out/`; hard-guards against packaging a kernel without CONFIG_KSU
 - [ ] Flash both variants, test Wi-Fi/BT under heat load
+      (`docs/FLASHING.md` written: flash set, backups, rollback, caveats)
 
-## Status (2026-09-24)
-- Source tree complete (22 GB), KernelSU-Next in, all three patches applied &
-  committed in-tree (aosp `bf8815155c98`, bcm4398 `cdf02d5`, zuma `ebc7b94`).
-- Patch files mirrored in project repo `patches/`.
-- WSL repaired after boot-failure incident (see Incidents) — `systemd=false`.
-- Both base images in hand (AICP via adb, stock factory verified+extracted).
-- **Kleaf build running** (`./build_shusky.sh --jobs=5`, background).
-- Next: build → verify vermagic → package both boot.imgs + companion images
-  → flash instructions (with hardware-vs-software Wi-Fi caveat).
+## Status (2026-09-24, 22:55)
+- Source tree complete (22 GB), KernelSU-Next v3.4.0 in-tree, patches
+  committed: aosp hooks `392e8c74c971` (defconfig entry reverted
+  `51d090c67d6e` — KSU via Kconfig `default y`), bcm4398 `cdf02d5`,
+  zuma `ebc7b94`.
+- **Source build attempt 2 RUNNING** under the monitor (config check passed
+  at ~22:56; attempt limit 3; log `out/build.log`, watchdog `out/monitor.log`).
+- Docs: `docs/FLASHING.md` written; PATCHES/PLAN updated (prebuilt trap +
+  canonical-defconfig incident).
+- Packaging script hardened (dist-Image pin + CONFIG_KSU guard + companions).
+- Pending: BUILD_OK → `verify-final.sh` → `package-bootimgs.sh` → commit+push
+  scripts/docs → cleanup (`.wslconfig` virtioproxy restore, unregister
+  WslTest) → delivery message (flash steps + honest caveats).

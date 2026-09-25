@@ -1,0 +1,26 @@
+commit 392e8c74c971ffc6f68e54254aace036e8cceb0d
+Author: King <king@local>
+Date:   Thu Sep 24 02:05:11 2026 +0100
+
+    KernelSU-Next v3.4.0: drivers Makefile/Kconfig hooks (setup.sh)
+
+diff --git a/drivers/Kconfig b/drivers/Kconfig
+index 19ee995bd0ae..cf68b538d592 100644
+--- a/drivers/Kconfig
++++ b/drivers/Kconfig
+@@ -239,4 +239,5 @@ source "drivers/peci/Kconfig"
+ 
+ source "drivers/hte/Kconfig"
+ 
++source "drivers/kernelsu/Kconfig"
+ endmenu
+diff --git a/drivers/Makefile b/drivers/Makefile
+index bdf1c66141c9..d69d75d156d6 100644
+--- a/drivers/Makefile
++++ b/drivers/Makefile
+@@ -189,3 +189,5 @@ obj-$(CONFIG_COUNTER)		+= counter/
+ obj-$(CONFIG_MOST)		+= most/
+ obj-$(CONFIG_PECI)		+= peci/
+ obj-$(CONFIG_HTE)		+= hte/
++
++obj-$(CONFIG_KSU) += kernelsu/
