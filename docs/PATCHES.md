@@ -11,7 +11,7 @@ idempotently after a fresh sync.
 |---|-------|-------|----------|---------|
 | 0001 | KernelSU built-in | `aosp` (Kconfig/Makefile hooks) + KernelSU-Next `default y` | **boot.img** (kernel) | KernelSU-Next v3.4.0 built-in root |
 | 0002 | Wi-Fi power-save off | `bcm4398/dhd_linux.c`, `bcm4398/wl_cfg80211.c` | **vendor_dlkm** (`bcmdhd4398.ko`) | Stable Wi-Fi link under heat |
-| 0003 | Thermal −5 °C | 4 × `zuma-{a0,b0}-{ipop,foplp}.dts` | **dtbo.img** + **vendor_kernel_boot/dtb** (base DTBs ride both; husky has no `dtb` partition) | Cooler CPU/GPU peaks |
+| 0003 | Thermal −5 °C | 4 × `zuma-{a0,b0}-{ipop,foplp}.dts` | **vendor_kernel_boot**'s packed `dtb` (4 concatenated base FDTs; `dtbo.img` carries only board/PMIC DTBs — verified: 0 trips there) | Cooler CPU/GPU peaks |
 
 ## Why the patches land in different images
 
@@ -25,16 +25,27 @@ The Pixel 8 Pro kernel build (Kleaf) splits one build across several flash targe
   `bcmdhd4398.ko` (Wi-Fi), `bluetooth.broadcom`, touch/NFC/GPS…
   → patch 0002 lives here. (`bcmdhd4398` is blocklisted from auto-load and
   explicitly `modprobe`d via `insmod_cfg/init.insmod.husky.cfg`.)
-- **dtbo.img** — contains the base SoC device trees (where the thermal
-  zones/trips are defined) *plus* the board overlay. husky has **no `dtb`
-  partition** (verified against the factory image's `fastboot-info.txt`), so
-  the built DTBs ship inside the dtbo partition image. → patch 0003 lives here.
+- **vendor_kernel_boot** — carries the packed **`dtb` = 4 concatenated FDTs**
+  (zuma a0/b0 × ipop/foplp), each with the full thermal zone/trip set. The
+  base DTBs live *here*, since husky has **no standalone `dtb` partition**
+  (verified against the factory image's `fastboot-info.txt`). → patch 0003
+  lives here. Verified by per-FDT stock-vs-built diff of `out/vendor_kernel_boot.img`:
+  exactly 4 changed trips × 4 FDTs = 16 trips, all −5 °C, all `passive`;
+  safety trips (93–115 °C) byte-identical. The booted device reports the
+  patched **foplp** control set (BIG 90 / MID 90 / LITTLE 95 / G3D 95 °C,
+  all passive). The Wi-Fi RC node (`pcie@13120000`) in the same dtb is
+  byte-identical to stock — the Wi-Fi failure is not DT-related.
+- **dtbo.img** — board/PMIC overlay DTBs only (19 blobs; `parse-trips` over
+  `out/dtbo.img` returns **0** trips — the thermal zones are not in dtbo).
+  Still flashed so overlay and base dtb come from the same build.
 - **vendor_boot / vendor_kernel_boot** (vendor ramdisk) — early SoC modules
   (`gs_thermal.ko` TMU driver, `exynos-acme.ko` cpufreq, battery, display…).
 
 Flashing plan (verified against the stock factory image's `fastboot-info.txt`):
 `fastboot flash boot` is required for root (0001). 0002 and 0003 take effect when
-their companion images are flashed too: `fastboot flash dtbo dtbo.img` (0003) and
+their companion images are flashed too: `fastboot flash vendor_kernel_boot
+out/vendor_kernel_boot.img` (0003 — the trips live in its packed `dtb`), plus
+`fastboot flash dtbo out/dtbo.img` (same-build overlay) and
 `fastboot flash vendor_dlkm vendor_dlkm.img` from fastbootd
 (`fastboot reboot fastboot` first — vendor_dlkm is a logical partition inside
 `super`). Stock flash list: boot, init_boot, dtbo, vendor_kernel_boot, pvmfw,
@@ -87,8 +98,12 @@ Build notes:
   handles routinely.
 - Honest trade-off: +~100–200 mW idle Wi-Fi power (slightly higher always-on
   radio power, but no PS transition churn).
-- **If the Wi-Fi failure is hardware (IC/solder), no software patch fixes it** —
-  this only removes the software-side failure mode.
+- **Confirmed (2026-09-25): this phone's Wi-Fi failure IS hardware** — full
+  evidence in `FLASHING.md` §5 (cold soak = enumerates and connects; warm =
+  PCIe endpoint never presence-detects; 0/4 warm reboots; identical failure
+  on an untouched stack). Patch 0002 removes the software-side failure mode
+  only; it cannot repair a marginal IC — but with −5 °C thermal soak delay
+  it lengthens the cold window in which the chip works.
 
 ## 0003 — start CPU/GPU thermal throttling 5 °C earlier
 

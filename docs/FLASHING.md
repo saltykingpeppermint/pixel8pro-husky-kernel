@@ -12,8 +12,8 @@ time.
 |--------------------------------|--------------------------|-----|
 | `boot-aicp.img` **or**         | `boot`                   | Kernel with KernelSU-Next built in + your ROM's original ramdisk/init (only the kernel is swapped) |
 | `boot-stock.img`               | `boot` (Google stock ROM) | same, packed into the factory boot container |
-| `dtbo.img`                     | `dtbo`                   | device tree incl. lowered **passive** thermal trips (safety trips untouched) |
-| `vendor_kernel_boot.img`       | `vendor_kernel_boot`     | bootloader DTB source built from the same patched source |
+| `dtbo.img`                     | `dtbo`                   | board/PMIC overlay DTBs from the same build (the thermal trips are *not* here — verified: `dtbo.img` contains 0 trips) |
+| `vendor_kernel_boot.img`       | `vendor_kernel_boot`     | packed `dtb` (4 base FDTs) carrying the lowered **passive** thermal trips (safety trips untouched) |
 | `system_dlkm.img`              | `system_dlkm` (logical)  | GKI modules (modversions-locked to this exact kernel) |
 | `vendor_dlkm.img`              | `vendor_dlkm` (logical)  | vendor modules incl. **bcmdhd4398 Wi-Fi driver** with power-save patch |
 
@@ -91,18 +91,33 @@ adb shell cat /proc/version
 # module load health: must be empty (no vermagic/CRC rejections)
 adb shell dmesg | grep -iE 'vermagic|disagrees|module.*not found'
 
-# lowered passive trips present (millicegrees: 90000/95000 foplp, 85000/90000 ipop)
+# lowered passive control trips (millicegrees). Which set appears depends on
+# which of the 4 packed FDTs booted: foplp = 90000/90000/95000/95000,
+# ipop = 85000/85000/90000/85000 (BIG/MID/LITTLE/G3D); safety trips stay 93000–115000
 adb shell 'grep -h . /sys/class/thermal/thermal_zone*/trip_point_*_temp | sort -u | head -40'
 ```
 
-**KernelSU-Next**: install the KernelSU-Next **manager APK** (same version as
-the integrated source, v3.4.0, from their GitHub releases). It should detect
-the built-in kernel and report its version. Grant yourself root there, then
+**KernelSU-Next**: install the **official KernelSU-Next manager APK**
+(package **`com.rifsxd.ksunext`**, v3.4.0 — same version as the integrated
+source, from the KernelSU-Next GitHub releases). It should detect the
+built-in kernel and report its version. Grant yourself root there, then
 test: `adb shell su -c id`.
 
-Wi-Fi: run a normal session (and optionally `adb shell dmesg | grep -i bcmdhd`)
-— with the patch, the driver no longer enters PS-poll power save while
-connected.
+> **Manager package matters:** the kernel bakes in the KernelSU-Next
+> *release signing certificate*. A foreign manager (e.g.
+> `me.weishu.kernelsu`) fails the uapi handshake and dies immediately with
+> **seccomp SIGSYS** — that is a broken manager install, not a broken
+> kernel. Uninstall any older KernelSU app before installing
+> `com.rifsxd.ksunext`.
+
+Wi-Fi: with the patch, the driver no longer enters PS-poll power save while
+connected (`PM_OFF` active / `PM_MAX` on suspend). **Expected behaviour on
+this device**: the Wi-Fi IC is thermally marginal (see §5) — on a *cold*
+boot the chip enumerates, connects and stays connected until it warms; once
+warm, the PCIe endpoint stops presence-detecting, Wi-Fi dies and will not
+come back until the next cold boot. Quick-settings toggles cannot revive a
+warm chip (the framework's enable attempts fail behind the wedged HAL).
+Bluetooth rides UART and stays up as long as the wifi driver loaded.
 
 ## 4. Rollback
 
@@ -123,12 +138,20 @@ fastboot reboot
 
 ## 5. Honest caveats — read this
 
-1. **A kernel cannot fix broken hardware.** Pixel Wi-Fi chips are known to
-   develop *hardware* faults (cracked solder joints under the Wi-Fi IC).
-   Test it this way: if the dropouts disappear with this kernel → it was
-   software (power-save/thermal). If they continue *identically* → suspect the
-   hardware; no kernel, ROM or driver change will fix a failing IC — it needs
-   reflow/replacement.
+1. **A kernel cannot fix broken hardware — on this device that is now
+   confirmed, not suspected.** Pixel Wi-Fi chips are known to develop
+   *hardware* faults (cracked solder joints under the Wi-Fi IC). Evidence
+   (2026-09-25): full power-off + cold soak in a fridge → Wi-Fi **and**
+   Bluetooth enumerate and connect; as the phone warms, the BCM4398 PCIe
+   endpoint fails presence-detect (`DETECT QUIET(0x0)` ×10 → `pcie link up
+   fail`) and Wi-Fi dies while BT (UART) survives; **0/4 warm reboots**
+   failed identically on this stack; an untouched kernel stack failed the
+   same way on Sept 18. Cold = works, warm = dies is the signature of a
+   marginal BGA/solder joint — **it needs reflow/replacement**; no kernel,
+   ROM or driver change will fix it. What this kernel *does* give you:
+   power-save off removes the software-side dropout mode, and −5 °C
+   throttling delays the heat that triggers the hardware fault, so the
+   working (cold) window lasts longer.
 2. **Wi-Fi power-save off costs power**: roughly 100–200 mW extra idle draw
    while Wi-Fi is on. Suspend/sleep is unaffected (PS is re-enabled when the
    device sleeps — the patch only changes the *connected, awake* policy).

@@ -14,9 +14,12 @@
   which is a tiny BUILD-overlay stub). Device build = Kleaf
   `//private/devices/google/shusky:zuma_shusky_dist` via `./build_shusky.sh`.
 - **boot.img's kernel is built from `gki_defconfig` alone** (device defconfig
-  fragments apply only to modules) → `CONFIG_KSU` goes in `gki_defconfig`.
-  Wi-Fi/BT modules land in **vendor_dlkm**, thermal trips in **dtb.img**
-  (see `docs/PATCHES.md` for the full flash matrix).
+  fragments apply only to modules) → `CONFIG_KSU` resolves via KernelSU-Next's
+  Kconfig `default y` (an explicit defconfig entry breaks Kleaf's
+  savedefconfig-canonical check — see Incidents). Wi-Fi/BT modules land in
+  **vendor_dlkm**, thermal trips in **vendor_kernel_boot's packed `dtb`**
+  (4 concatenated FDTs; `dtbo.img` carries no trips — see `docs/PATCHES.md`
+  for the full flash matrix).
 - LineageOS/AICP do NOT build their own kernel for husky — they boot Google's
   GKI prebuilt → **one kernel Image serves both ROMs**; only the boot.img
   container differs → two packaged outputs, one build.
@@ -31,11 +34,24 @@
   Modules use `CONFIG_MODVERSIONS=y` → keep kernel version string compatible
   if mixing ROM-provided modules (verify `vermagic` after first build).
 
-## Wi-Fi/BT/heat honesty
-- Mix of software (thermal throttling, Wi-Fi power-save, firmware crash
-  handling) and hardware (Wi-Fi IC solder — "works when cold").
-- Kernel can only address the software side; hardware fault is unfixable
-  in software. Expectations set accordingly.
+## Wi-Fi/BT/heat honesty — VERDICT (2026-09-25, device owner confirmed)
+- **Hardware fault confirmed by the device owner's fridge test:** full
+  power-off + cold soak → Wi-Fi **and** Bluetooth enumerate and connect;
+  as the phone warms, the BCM4398 PCIe endpoint stops presence-detecting
+  (`DETECT QUIET(0x0)` ×10 → `pcie link up fail` → driver init/resume
+  fails) and Wi-Fi dies while BT (UART transport) stays up.
+- Evidence stack: 0/4 warm reboots failed identically on our stack;
+  identical failure on the untouched blu-spark stack (Sept 18); the wifi
+  RC DT node is byte-identical to stock; WL_REG_ON is driven high and the
+  driver never power-cycles it (no userspace GPIO path); the cold-boot
+  dmesg shows connect → first resume link death → successful retrain while
+  still cool (L0 at try 5) → permanent warm failure thereafter.
+- Kernel addresses only the software side (PS-off removes the software
+  dropout mode, −5 °C delays the heat that triggers the hardware fault);
+  the IC itself needs reflow/replacement — delivered as an honest caveat.
+- Downstream symptoms explained: the BT crash-loop happens only when the
+  wifi driver fails *init* (so no coex device is created); with the driver
+  loaded (cold boot) BT survives Wi-Fi's death.
 
 ## Incidents
 - **Disk exhaustion:** full (non-shallow) repo sync filled C: to 152 MB;
@@ -139,10 +155,23 @@
       from base, lz4-**legacy** frame; round-trip verified: kernel_size ==
       ours, banner + `CONFIG_KSU=y` inside) **+ companion copies** (dtbo,
       system_dlkm, vendor_dlkm, vendor_kernel_boot) in `out/`
-- [ ] Flash both variants, test Wi-Fi/BT under heat load
-      (`docs/FLASHING.md` written: flash set, backups, rollback, caveats;
-      AICP set already pushed to `/sdcard/Download/kernel-flash/`, all 5
-      MD5-verified against PC copies)
+- [x] **Flashed + verified on the test device**
+      (AICP, slot `_a`,
+      2026-09-25): boot + dtbo + vendor_kernel_boot (bootloader mode),
+      system_dlkm + vendor_dlkm (fastbootd — mandatory: without them AICP's
+      6.1.145 dlkms fail modversions CRC against our 6.1.124 kernel and the
+      thermal HAL aborts). Result: `sys.boot_completed=1`, 0 CRC mismatches,
+      SELinux Enforcing.
+- [x] **KernelSU-Next verified**: official manager `com.rifsxd.ksunext`
+      v3.4.0 installed → crowning, fd grant and `su -c id` all pass (a
+      foreign manager `me.weishu.kernelsu` was rejected with seccomp
+      SIGSYS — always use the official package).
+- [x] **Wi-Fi/BT heat test done → hardware verdict** (see above): fridge
+      cold boot enumerates/connects, warm-up kills Wi-Fi, 0/4 warm reboots.
+- [x] **Thermal trips verified live**: per-FDT stock-vs-built diff of
+      vendor_kernel_boot's packed `dtb` = 16/16 trips −5 °C; live device
+      audit matches the patched foplp set (90/90/95/95 passive); `dtbo.img`
+      carries no trips (board/PMIC only).
 
 ## Status (2026-09-25, 09:15)
 - **Pipeline COMPLETE**: build (08:05:31 `BUILD_EXIT=0`) → verify
@@ -155,5 +184,16 @@
 - Incident log: host restarts killed attached builds twice → detached
   launch; probe flakes caused duplicate launches → two-strike liveness;
   WSL service crash (E_UNEXPECTED) → fsck clean, rebuilt fine.
-- Remaining: **user flashes per `docs/FLASHING.md`** (backups first), then
-  heat-load Wi-Fi/BT test; review the honest caveats before flashing.
+- Remaining: **flashing/dlkm/KSU/heat-test all completed 2026-09-25**
+  (see checklist above); honest caveats delivered with the hardware verdict.
+
+## Status (2026-09-25, ~15:45 — delivery)
+- Device fully on our stack: kernel `6.1.124-android14-11-g51d090c67d6e`,
+  `CONFIG_KSU=y`, both dlkms flashed (0 CRC mismatches), 16/16 thermal
+  trips −5 °C verified live, KSU-Next manager detected and `su` working.
+- Wi-Fi hardware verdict delivered and accepted by the device owner
+  (fridge test: cold = works, warm = dies; cold-boot dmesg captured to
+  `out/dmesg-fridge.log` as final evidence).
+- Docs updated: thermal carrier corrected to vendor_kernel_boot's packed
+  dtb (was claimed to ride dtbo.img), KSU manager package requirement
+  (`com.rifsxd.ksunext` only), Wi-Fi verdict + evidence stack.
