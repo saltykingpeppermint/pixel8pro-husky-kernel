@@ -38,21 +38,31 @@ if [ -n "$(git -C "$R/aosp" status --porcelain -- drivers/Makefile drivers/Kconf
     echo "[commit] aosp: KernelSU hooks"
 fi
 
-# --- step 2: CONFIG_KSU=y in gki_defconfig ---
+# --- step 2: CONFIG_KSU resolution — deliberately NO gki_defconfig entry ---
+# KernelSU-Next's Kconfig has `default y` (deps KPROBES && EXT4_FS, both =y in
+# gki_defconfig). An explicit CONFIG_KSU=y line is redundant, and Kleaf's
+# KernelConfig action requires gki_defconfig to be byte-identical to
+# `make savedefconfig` output, which drops value==default entries — so any
+# defconfig entry FAILS THE BUILD. Root comes from the Kconfig default.
 DC="$R/aosp/arch/arm64/configs/gki_defconfig"
-if ! grep -q "^CONFIG_KSU=y" "$DC"; then
-    printf '\n# KernelSU-Next: built-in root manager\nCONFIG_KSU=y\n' >> "$DC"
-    echo "[edit] gki_defconfig: appended CONFIG_KSU=y"
-else
-    echo "[skip] gki_defconfig already has CONFIG_KSU=y"
+if grep -q '^CONFIG_KSU' "$DC"; then
+    echo "FAIL: gki_defconfig contains CONFIG_KSU — remove it (breaks Kleaf's"
+    echo "      savedefconfig-canonical check; default y already enables KSU)"
+    exit 1
 fi
-gen_patch "$R/aosp" "arch/arm64/configs/gki_defconfig" \
-    "$OUT/0001-gki_defconfig-CONFIG_KSU.patch"
-if [ -n "$(git -C "$R/aosp" diff HEAD -- arch/arm64/configs/gki_defconfig)" ]; then
-    git -C "$R/aosp" commit -q -m "gki_defconfig: enable CONFIG_KSU for KernelSU-Next built-in root" \
-        -- arch/arm64/configs/gki_defconfig
-    echo "[commit] aosp: CONFIG_KSU"
-fi
+KSUK="$R/KernelSU-Next/kernel/Kconfig"
+grep -q 'default y' "$KSUK" || {
+    echo "FAIL: KernelSU-Next Kconfig lost its 'default y' — CONFIG_KSU would resolve to n"
+    exit 1
+}
+echo "[ok] CONFIG_KSU via Kconfig default y; gki_defconfig left canonical"
+# Patch 0001 = the required drivers Kconfig/Makefile hooks (regenerated)
+HOOK_SHA=$(git -C "$R/aosp" log --format=%H --grep='KernelSU-Next.*hooks' -1)
+[ -n "$HOOK_SHA" ] || { echo "FAIL: KernelSU hook commit not found in aosp"; exit 1; }
+git -C "$R/aosp" show --no-color "$HOOK_SHA" -- drivers/Kconfig drivers/Makefile \
+    > "$OUT/0001-kernelsu-hooks.patch"
+test -s "$OUT/0001-kernelsu-hooks.patch" || { echo "FAIL: 0001 patch empty"; exit 1; }
+echo "[patch] -> $OUT/0001-kernelsu-hooks.patch"
 
 # --- step 3: Wi-Fi power-save off (bcmdhd4398) ---
 python3 - <<'PYEOF'
@@ -141,7 +151,12 @@ fi
 
 echo
 echo "== verification =="
-grep -n "CONFIG_KSU=y" "$DC"
+if grep -q '^CONFIG_KSU' "$DC"; then
+    echo "FAIL: gki_defconfig must stay free of CONFIG_KSU (canonical check)"
+    exit 1
+fi
+echo "[ok] gki_defconfig clean of CONFIG_KSU (resolved by default y)"
+grep -n 'default y' "$KSUK" | head -2
 grep -n "power_mode = PM_OFF\|PM_MAX : PM_OFF" \
     "$R/private/google-modules/wlan/bcm4398/dhd_linux.c" \
     "$R/private/google-modules/wlan/bcm4398/wl_cfg80211.c"
