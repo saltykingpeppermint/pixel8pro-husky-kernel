@@ -162,6 +162,17 @@ fastboot reboot
    kernel was 6.1.145 — you are trading those *later kernel* changes for
    KernelSU + the Wi-Fi/thermal patches. Wi-Fi/Bluetooth **firmware** is not
    part of this flash set; it stays whatever your ROM ships.
-5. This is a **GKI-style custom kernel built from Google's source with local
+5. **Android version scope: v1.0.0 was built and verified on Android 16-era
+   ROMs only** (AICP Android 16 + stock factory `bp31.250610.009`).
+   **Android 17 (stable 2026-06-16) is untested.** Google still ships husky
+   on the same `android-gs-shusky-6.1-android16` / GKI `android14-6.1` kernel
+   branch (docs as of 2026-07-13; no `android17` shusky branch exists), so the
+   KMI generation matches in principle — but our dlkms drivers are a year
+   behind the branch HEAD and the boot container was packed from an Android 16
+   factory boot. Don't claim Android 17 support without a verification pass.
+   Also remember: **every ROM OTA (Android 17 included) slot-switches you back
+   to stock boot/dtbo/vendor_kernel_boot/dlkms** — after any update, re-flash
+   the whole set on the newly active slot.
+6. This is a **GKI-style custom kernel built from Google's source with local
    patches** — not an official Google or KernelSU release. Flash at your own
    risk; keep the backups.

@@ -46,6 +46,24 @@ The kernel source itself is **not** in this repo — it is Google's
 `--config=use_source_tree_aosp` is **mandatory** — the default path downloads
 Google's prebuilt GKI, which has no KernelSU and mismatched module vermagic.
 
+## Compatibility (Android version)
+
+**v1.0.0 targets Android 16-era ROMs** — built, flashed and verified on AICP
+(Android 16) and the stock Google Android 16 factory image
+(`bp31.250610.009`). **Android 17 (stable since 2026-06-16) is untested.**
+
+Android 17 should be *close* in principle — Google's docs (updated 2026-07-13)
+still list husky on `android-gs-shusky-6.1-android16` / GKI `android14-6.1`,
+the same KMI generation as this build, and no `android17` shusky kernel branch
+exists — but nothing here has been verified on it: the dlkms drivers are a
+year behind the branch HEAD, and the boot container was packed from an
+Android 16 factory boot. Don't treat v1.0.0 as an Android 17 release.
+
+Note that **every ROM OTA slot-switches back to stock images** on the new
+slot — boot, dtbo, vendor_kernel_boot (thermal trips) and both dlkms. After
+updating (Android 17 or any other), re-flash the full set on the newly active
+slot.
+
 ## Status
 
 See `docs/PLAN.md` § Status. Flash images are produced by
