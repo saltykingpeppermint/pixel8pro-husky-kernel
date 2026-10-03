@@ -1,6 +1,6 @@
 # Kernel patches
 
-Three patches, written against `android-gs-shusky-6.1-android16` (GKI `android14-6.1`).
+Four patches, written against `android-gs-shusky-6.1-android16` (GKI `android14-6.1`).
 All are already applied in the WSL tree (`~/kernel-shusky`) and committed in their
 respective AOSP git projects. `scripts/apply-patches.sh` regenerates the patch files
 idempotently after a fresh sync.
@@ -11,7 +11,8 @@ idempotently after a fresh sync.
 |---|-------|-------|----------|---------|
 | 0001 | KernelSU built-in | `aosp` (Kconfig/Makefile hooks) + KernelSU-Next `default y` | **boot.img** (kernel) | KernelSU-Next v3.4.0 built-in root |
 | 0002 | Wi-Fi power-save off | `bcm4398/dhd_linux.c`, `bcm4398/wl_cfg80211.c` | **vendor_dlkm** (`bcmdhd4398.ko`) | Stable Wi-Fi link under heat |
-| 0003 | Thermal −5 °C | 4 × `zuma-{a0,b0}-{ipop,foplp}.dts` | **vendor_kernel_boot**'s packed `dtb` (4 concatenated base FDTs; `dtbo.img` carries only board/PMIC DTBs — verified: 0 trips there) | Cooler CPU/GPU peaks |
+| 0003 | Wi-Fi/BT fake cooler thermals | `bcm4398/wl_cfgvendor.c` | **vendor_dlkm** (`bcmdhd4398.ko`) | Force DUTY_CYCLE_NONE — chip thinks it's cooler |
+| 0004 | Thermal −5 °C | 4 × `zuma-{a0,b0}-{ipop,foplp}.dts` | **vendor_kernel_boot**'s packed `dtb` (4 concatenated base FDTs; `dtbo.img` carries only board/PMIC DTBs — verified: 0 trips there) | Cooler CPU/GPU peaks |
 
 ## Why the patches land in different images
 
@@ -105,7 +106,36 @@ Build notes:
   only; it cannot repair a marginal IC — but with −5 °C thermal soak delay
   it lengthens the cold window in which the chip works.
 
-## 0003 — start CPU/GPU thermal throttling 5 °C earlier
+## 0003 — Wi-Fi/BT fake cooler thermals (disable thermal mitigation)
+
+The Android Wi-Fi HAL monitors system thermal zones (CPU/GPU) and sends
+thermal mitigation commands to the driver via vendor NL80211. The driver maps
+these to firmware duty cycles:
+
+| HAL mode | Duty cycle | Effect |
+|----------|------------|--------|
+| NONE | 100 % | Full performance |
+| LIGHT | 90 % | Slight TX reduction |
+| MODERATE | 70 % | Noticeable throughput drop |
+| SEVERE | 50 % | Significant degradation |
+| CRITICAL | 30 % | Barely usable |
+| EMERGENCY | 10 % | Near shutdown |
+
+**Patch:** `wl_cfgvendor_thermal_mitigation()` now forces `duty_cycle = DUTY_CYCLE_NONE`
+(100 %) unconditionally, logging the override. The BCM4398 is a Wi-Fi/BT **combo
+chip** — the firmware receives one duty-cycle command for the shared radio, so
+this single change benefits **both Wi-Fi and Bluetooth**.
+
+Rationale: the device has a confirmed hardware fault (BCM4398 solder cracking
+when hot). The HAL-driven mitigation accelerates the failure by reducing TX
+power right when the chip needs margin. Faking "cool" thermals keeps the radio
+at full power, extending the cold-soak window where the chip actually works.
+
+Trade-off: higher sustained TX power → more heat → potentially faster hardware
+degradation. But without this, the chip wedges/shuts down at ~65 °C skin temp
+anyway. This is a workaround, not a fix — the IC needs reflow/replacement.
+
+## 0004 — start CPU/GPU thermal throttling 5 °C earlier
 
 Passive `*_control_temp` trips (the governor-driven cpufreq/GPU cooling trips)
 lowered by 5 °C in all four base DTBs:
@@ -127,8 +157,9 @@ and battery; cost: ~5 % lower sustained performance in heavy loads.
 ## Bluetooth
 
 No dedicated BT source patch: the BCM4398 is a Wi-Fi/BT combo chip — it benefits
-from 0002 (shared radio stays in a stable mode) and 0003 (cooler package). The
-BT userspace stack (`CONFIG_BT=m`) is untouched.
+from 0002 (shared radio stays in a stable mode), 0003 (fake cooler thermals
+keeps shared radio at full power), and 0004 (cooler package). The BT userspace
+stack (`CONFIG_BT=m`) is untouched.
 
 ## Re-applying after a fresh sync
 
@@ -136,7 +167,8 @@ BT userspace stack (`CONFIG_BT=m`) is untouched.
 # per project, from the kernel tree root:
 git -C aosp                                apply patches/0001-...patch   # -p1, run inside aosp/
 git -C private/google-modules/wlan/bcm4398 apply patches/0002-...patch
-git -C private/devices/google/zuma         apply patches/0003-...patch
+git -C private/google-modules/wlan/bcm4398 apply patches/0003-...patch
+git -C private/devices/google/zuma         apply patches/0004-...patch
 ```
 or simply re-run `scripts/apply-patches.sh` (idempotent; also rebuilds the patch files).
 
@@ -146,3 +178,9 @@ or simply re-run `scripts/apply-patches.sh` (idempotent; also rebuilds the patch
 > The still-required part of 0001 is the drivers Kconfig/Makefile hook commit
 > (`392e8c74c971` in `aosp/`), regenerated as a patch by
 > `scripts/apply-patches.sh`.
+
+> **Note (2026-10-03):** Patch 0003 (fake cooler thermals) and 0004 (thermal
+> −5 °C) are new additions. Patch 0003 forces the BCM4398 firmware to always
+> run at 100% duty cycle (DUTY_CYCLE_NONE), making the shared Wi-Fi/BT radio
+> believe thermals are cooler than reported by the HAL. This is a workaround
+> for the confirmed hardware fault (BCM4398 solder cracking when hot).

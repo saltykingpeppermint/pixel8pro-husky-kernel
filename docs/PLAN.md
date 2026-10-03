@@ -53,6 +53,21 @@
   wifi driver fails *init* (so no coex device is created); with the driver
   loaded (cold boot) BT survives Wi-Fi's death.
 
+## Patch 0003 — Wi-Fi/BT fake cooler thermals (added 2026-10-03)
+- **What:** `wl_cfgvendor_thermal_mitigation()` now forces `duty_cycle = DUTY_CYCLE_NONE`
+  (100 %) regardless of the HAL-requested thermal mode.
+- **Why:** The Android HAL reads CPU/GPU thermal zones and commands the Wi-Fi
+  driver to reduce TX duty cycle when the SoC is hot. The BCM4398 is a
+  combo chip — one duty-cycle command controls the shared radio. By faking
+  "cool" thermals (always 100 % duty cycle), we prevent the firmware from
+  throttling the radio when the phone gets warm, extending the window where
+  the hardware actually works.
+- **Trade-off:** Higher sustained TX power → more heat → potentially faster
+  hardware degradation. But without this, the chip wedges at ~65 °C anyway.
+  This is a workaround for confirmed hardware fault, not a fix.
+- **Effect on Bluetooth:** Since BCM4398 shares one radio, BT also benefits
+  from the fake thermal override — no separate BT patch needed.
+
 ## Incidents
 - **Disk exhaustion:** full (non-shallow) repo sync filled C: to 152 MB;
   WSL became unresponsive mid-sync. Mitigations applied:
@@ -131,30 +146,23 @@
 - [x] `scripts/sync-source.sh` / `final-sync.sh` — sync complete 2026-09-24
       (rc=0, all 82 projects, shallow clang fetch, 0 garbage)
 - [x] `scripts/integrate-kernelsu-next.sh` — KernelSU-Next **v3.4.0** integrated
-- [x] Inspect tree → write `patches/` — **3 patches written, verified, committed**
-      (`docs/PATCHES.md`: 0001 CONFIG_KSU, 0002 Wi-Fi PM_OFF, 0003 thermal −5 °C)
+- [x] Inspect tree → write `patches/` — **4 patches written, verified, committed**
+      (`docs/PATCHES.md`: 0001 CONFIG_KSU, 0002 Wi-Fi PM_OFF, 0003 fake cooler thermals, 0004 thermal −5 °C)
 - [x] Base images obtained 2026-09-24: `base/aicp-boot.img` (adb root,
       dd of boot_a slot — 64 MB, `ANDROID!` magic ✓) + factory image
       sha256-verified & extracted →
       `D:\pixel8pro-factory\out\husky_beta-bp31.250610.009\`
       (boot.img, dtbo.img, vbmeta{,_system,_vendor}.img, android-info.txt)
-- [x] **Source build: BUILD_OK 2026-09-25 08:05:31** (`out/build.log`
-      `BUILD_EXIT=0`; monitor hardening along the way: detached `setsid`
-      launch survives harness restarts, two-strike liveness, attempts only
-      counted on confirmed starts, stall watchdog; savedefconfig-canonical
-      failure fixed via revert `51d090c67d6e`)
-- [x] `scripts/verify-final.sh` — **VERIFY_OK**: Image UTS
-      `6.1.124-android14-11-g51d090c67d6e` == aosp HEAD, `CONFIG_KSU=y`
-      (ikconfig, 398 KSU strings), 5 vermagics match, wifi source patched
-      (dhd=2, wl=1, ko newer), all 16 thermal trips −5 °C (foplp
-      90/90/95/95, ipop 85/85/90/85), fips load-lists clean
-      (fixed: pinned bcm4398 path — `find` grabbed bcm4389 — and ipop GPU
-      expects 85000, which the DTB correctly carries)
-- [x] `scripts/package-bootimgs.sh` → `out/boot-aicp.img` +
-      `out/boot-stock.img` (header v4, pagesize 4096, cmdline/ramdisk carried
-      from base, lz4-**legacy** frame; round-trip verified: kernel_size ==
-      ours, banner + `CONFIG_KSU=y` inside) **+ companion copies** (dtbo,
-      system_dlkm, vendor_dlkm, vendor_kernel_boot) in `out/`
+- [x] **Source build with new patches: DONE 2026-10-03** —
+      `./build_shusky.sh --jobs=5 --config=use_source_tree_aosp` →
+      `out/build.log` `BUILD_EXIT=0` at 15:12:32
+- [x] `scripts/verify-final.sh` — **VERIFY_OK** 2026-10-03 (incl. new §5b:
+      `FAKE THERMAL` in source, `bcmdhd4398.ko` rebuilt after patch, all
+      16 thermal trips −5 °C, KSU=y, vermagic consistent)
+- [x] `scripts/package-bootimgs.sh` → flash set re-packaged 15:13:45;
+      `out/vendor_dlkm.img` byte-identical to dist image and raw-greps
+      `FAKE THERMAL` end-to-end; `out/checksums.sha256` regenerated
+      (only `vendor_dlkm.img` hash changed vs v1.0.0)
 - [x] **Flashed + verified on the test device**
       (AICP, slot `_a`,
       2026-09-25): boot + dtbo + vendor_kernel_boot (bootloader mode),
@@ -172,6 +180,8 @@
       vendor_kernel_boot's packed `dtb` = 16/16 trips −5 °C; live device
       audit matches the patched foplp set (90/90/95/95 passive); `dtbo.img`
       carries no trips (board/PMIC only).
+- [ ] **Fake thermal patch test: PENDING** — verify `FAKE THERMAL` log messages
+      appear in dmesg when thermal HAL sends mitigation commands
 
 ## Status (2026-09-25, 09:15)
 - **Pipeline COMPLETE**: build (08:05:31 `BUILD_EXIT=0`) → verify
@@ -186,6 +196,23 @@
   WSL service crash (E_UNEXPECTED) → fsck clean, rebuilt fine.
 - Remaining: **flashing/dlkm/KSU/heat-test all completed 2026-09-25**
   (see checklist above); honest caveats delivered with the hardware verdict.
+
+## Status (2026-10-03 — fake thermal patch added)
+- **New patch 0003 (fake cooler thermals)** added to `patches/` and
+  `scripts/apply-patches.sh`. Forces BCM4398 firmware to always run at
+  100% duty cycle (DUTY_CYCLE_NONE), making the shared Wi-Fi/BT radio
+  believe thermals are cooler than reported by the HAL.
+- **Patch 0004 (thermal −5 °C)** renumbered from 0003 (patch files now
+  numbered 0001–0004 matching `docs/PATCHES.md`; `apply-patches.sh`
+  gen_patch outputs updated accordingly).
+- **Build DONE**: `BUILD_EXIT=0` 2026-10-03 15:12:32 → `VERIFY_OK` →
+  flash set re-packaged 15:13:45 (new `vendor_dlkm.img` carries the fake
+  thermal driver; every other asset byte-identical to v1.0.0).
+- Flash will need: `boot.img` (KSU), `vendor_dlkm.img` (PM_OFF + fake
+  thermal), `vendor_kernel_boot.img` (−5 °C trips), `dtbo.img`, `system_dlkm.img`.
+- **Device-side test still PENDING** (checklist "Fake thermal patch test") —
+  blocked: device currently in a boot-failure state (`BL1 requested`) after
+  flashing on stock CP1A.260526; recovery being handled separately.
 
 ## Status (2026-09-25, ~15:45 — delivery)
 - Device fully on our stack: kernel `6.1.124-android14-11-g51d090c67d6e`,

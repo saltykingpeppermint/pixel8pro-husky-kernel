@@ -15,7 +15,7 @@ time.
 | `dtbo.img`                     | `dtbo`                   | board/PMIC overlay DTBs from the same build (the thermal trips are *not* here — verified: `dtbo.img` contains 0 trips) |
 | `vendor_kernel_boot.img`       | `vendor_kernel_boot`     | packed `dtb` (4 base FDTs) carrying the lowered **passive** thermal trips (safety trips untouched) |
 | `system_dlkm.img`              | `system_dlkm` (logical)  | GKI modules (modversions-locked to this exact kernel) |
-| `vendor_dlkm.img`              | `vendor_dlkm` (logical)  | vendor modules incl. **bcmdhd4398 Wi-Fi driver** with power-save patch |
+| `vendor_dlkm.img`              | `vendor_dlkm` (logical)  | vendor modules incl. **bcmdhd4398 Wi-Fi driver** with power-save patch (PM_OFF) + **fake cooler thermals** (forces DUTY_CYCLE_NONE) |
 
 Use `boot-aicp.img` on AICP (and other LineageOS-based ROMs), `boot-stock.img`
 on the Google factory ROM.

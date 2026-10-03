@@ -21,14 +21,18 @@ for p in private/google-modules/wlan/bcm4398 private/devices/google/zuma; do
 done
 
 # commit a patch file: diff worktree vs HEAD; if diff is empty the change is
-# already committed — require the patch file from a previous run instead.
+# already committed — use the existing patch file from a previous run instead.
 gen_patch() {
     local proj="$1" pathspec="$2" out="$3"
     if [ -n "$(git -C "$proj" diff HEAD -- $pathspec)" ]; then
         git -C "$proj" diff HEAD -- $pathspec > "$out"
+        echo "[patch] -> $out (regenerated)"
+    elif [ -f "$out" ]; then
+        echo "[patch] -> $out (unchanged, using existing)"
+    else
+        echo "FAIL: $out empty and no pending diff"
+        exit 1
     fi
-    test -s "$out" || { echo "FAIL: $out empty and no pending diff"; exit 1; }
-    echo "[patch] -> $out"
 }
 
 # --- step 1: commit the KernelSU-Next setup.sh hooks already in aosp worktree ---
@@ -104,7 +108,63 @@ if [ -n "$(git -C "$R/private/google-modules/wlan/bcm4398" diff HEAD)" ]; then
     echo "[commit] bcm4398: Wi-Fi PM_OFF"
 fi
 
-# --- step 4: thermal trips: throttle 5C earlier on CPU/GPU (4 base dtbs) ---
+# --- step 4: Wi-Fi/BT fake cooler thermals (disable thermal mitigation) ---
+# The BCM4398 is a Wi-Fi/BT combo chip. The HAL sends thermal mitigation
+# commands based on CPU/GPU temps. This patch forces the driver to always
+# report DUTY_CYCLE_NONE (100%) to the firmware, making the chip believe
+# thermals are cooler than they are. This prevents thermal throttling/shutdown
+# of the Wi-Fi/BT radio when the phone gets hot (hardware fault workaround).
+python3 - <<'PYEOF'
+import pathlib
+base = pathlib.Path("/home/king/kernel-shusky")
+p = base / "private/google-modules/wlan/bcm4398/wl_cfgvendor.c"
+t = p.read_text()
+
+# Find the thermal mitigation function and add the fake thermal override
+# We insert after the switch statement that sets duty_cycle, before tvpm_req allocation
+old_code = '''	WL_DBG(("%s, duty_cycle %d thermal_mode %d\\n", __FUNCTION__,
+			duty_cycle, set_thermal_mode));
+
+	tvpm_req = MALLOCZ(cfg->osh, reqlen);'''
+
+new_code = '''	WL_DBG(("%s, duty_cycle %d thermal_mode %d\\n", __FUNCTION__,
+			duty_cycle, set_thermal_mode));
+
+	/* FAKE THERMAL: Force duty cycle to NONE (100%) regardless of thermal mode.
+	 * This makes the Wi-Fi/BT chip (BCM4398) believe the thermals are cooler
+	 * than reported by the HAL, preventing thermal throttling/shutdown.
+	 * The BCM4398 is a combo chip - this benefits both Wi-Fi and Bluetooth.
+	 */
+	duty_cycle = DUTY_CYCLE_NONE;
+	WL_INFORM_MEM(("%s: FAKE THERMAL - forcing duty_cycle=NONE (was %d for mode %d)\\n",
+			__FUNCTION__, duty_cycle, set_thermal_mode));
+
+	tvpm_req = MALLOCZ(cfg->osh, reqlen);'''
+
+if old_code in t:
+    t = t.replace(old_code, new_code)
+    p.write_text(t)
+    print("[edit] wl_cfgvendor.c: Added fake thermal override (force DUTY_CYCLE_NONE)")
+else:
+    # Check if already patched
+    if "FAKE THERMAL" in t:
+        print("[skip] wl_cfgvendor.c: already patched with fake thermal")
+    else:
+        print("[FAIL] wl_cfgvendor.c: expected code pattern not found")
+        exit(1)
+print("fake thermal edits done")
+PYEOF
+
+gen_patch "$R/private/google-modules/wlan/bcm4398" "" \
+    "$OUT/0003-wifi-bt-fake-cooler-thermals.patch"
+if [ -n "$(git -C "$R/private/google-modules/wlan/bcm4398" diff HEAD)" ]; then
+    git -C "$R/private/google-modules/wlan/bcm4398" add -A
+    git -C "$R/private/google-modules/wlan/bcm4398" commit -q \
+        -m "bcmdhd4398: fake cooler thermals for Wi-Fi/BT (force DUTY_CYCLE_NONE)"
+    echo "[commit] bcm4398: fake cooler thermals"
+fi
+
+# --- step 5: thermal trips: throttle 5C earlier on CPU/GPU (4 base dtbs) ---
 python3 - <<'PYEOF'
 import re, pathlib
 base = pathlib.Path("/home/king/kernel-shusky/private/devices/google/zuma/dts")
@@ -141,7 +201,7 @@ print("thermal edits done")
 PYEOF
 
 gen_patch "$R/private/devices/google/zuma" "" \
-    "$OUT/0003-thermal-earlier-throttle.patch"
+    "$OUT/0004-thermal-earlier-throttle.patch"
 if [ -n "$(git -C "$R/private/devices/google/zuma" diff HEAD)" ]; then
     git -C "$R/private/devices/google/zuma" add -A
     git -C "$R/private/devices/google/zuma" commit -q \
@@ -160,6 +220,7 @@ grep -n 'default y' "$KSUK" | head -2
 grep -n "power_mode = PM_OFF\|PM_MAX : PM_OFF" \
     "$R/private/google-modules/wlan/bcm4398/dhd_linux.c" \
     "$R/private/google-modules/wlan/bcm4398/wl_cfg80211.c"
+grep -n "FAKE THERMAL" "$R/private/google-modules/wlan/bcm4398/wl_cfgvendor.c" || echo "[FAIL] Fake thermal patch not found"
 for f in zuma-a0-ipop zuma-a0-foplp zuma-b0-ipop zuma-b0-foplp; do
     echo "-- $f --"
     grep -A1 "big_control_temp:\|mid_control_temp:\|gpu_control_temp:\|little_control_temp:" \

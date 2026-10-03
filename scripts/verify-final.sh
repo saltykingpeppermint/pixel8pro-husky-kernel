@@ -98,6 +98,24 @@ else
 fi
 
 echo
+echo "=== 5b. wifi/bt fake cooler thermals patch ==="
+VCFG="$KSRC/private/google-modules/wlan/bcm4398/wl_cfgvendor.c"
+if [ -f "$VCFG" ]; then
+    if grep -q "FAKE THERMAL" "$VCFG" && grep -q "DUTY_CYCLE_NONE" "$VCFG"; then
+        ok "fake thermal override present in source"
+    else
+        bad "fake thermal patch markers missing in wl_cfgvendor.c"
+    fi
+    if [ -f "$DIST/bcmdhd4398.ko" ] && [ "$DIST/bcmdhd4398.ko" -nt "$VCFG" ]; then
+        ok "bcmdhd4398.ko rebuilt after fake thermal patch"
+    else
+        bad "bcmdhd4398.ko older than patched source (stale module?)"
+    fi
+else
+    bad "bcm4398 wl_cfgvendor.c missing at $VCFG"
+fi
+
+echo
 echo "=== 6. thermal trips in built DTBs ==="
 trip() { python3 "$PARSER" "$1" 2>/dev/null | awk -F= -v n="$2" '$1==n {print $2; exit}'; }
 expect_dtb() { # file node want

@@ -1,0 +1,20 @@
+diff --git a/wl_cfgvendor.c b/wl_cfgvendor.c
+index 8848c01..4c9d3a9 100644
+--- a/wl_cfgvendor.c
++++ b/wl_cfgvendor.c
+@@ -10871,6 +10871,15 @@ wl_cfgvendor_thermal_mitigation(struct wiphy *wiphy,
+ 	WL_DBG(("%s, duty_cycle %d thermal_mode %d\n", __FUNCTION__,
+ 			duty_cycle, set_thermal_mode));
+ 
++	/* FAKE THERMAL: Force duty cycle to NONE (100%) regardless of thermal mode.
++	 * This makes the Wi-Fi/BT chip (BCM4398) believe the thermals are cooler
++	 * than reported by the HAL, preventing thermal throttling/shutdown.
++	 * The BCM4398 is a combo chip - this benefits both Wi-Fi and Bluetooth.
++	 */
++	duty_cycle = DUTY_CYCLE_NONE;
++	WL_INFORM_MEM(("%s: FAKE THERMAL - forcing duty_cycle=NONE (was %d for mode %d)\n",
++			__FUNCTION__, duty_cycle, set_thermal_mode));
++
+ 	tvpm_req = MALLOCZ(cfg->osh, reqlen);
+ 	if (tvpm_req == NULL) {
+ 		WL_ERR(("%s: can't allocate %ld bytes\n",

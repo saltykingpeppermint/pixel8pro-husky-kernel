@@ -1,4 +1,4 @@
-# Pixel 8 Pro (husky) custom kernel — KernelSU-Next + Wi-Fi/heat patches
+# Pixel 8 Pro (husky) custom kernel — KernelSU-Next + Wi-Fi/BT/heat patches
 
 Custom kernel build for the **Google Pixel 8 Pro (husky)** targeting the
 heat-related Wi-Fi/Bluetooth problems, with **KernelSU-Next built in**, for
@@ -6,21 +6,22 @@ heat-related Wi-Fi/Bluetooth problems, with **KernelSU-Next built in**, for
 packaged `boot.img` variants).
 
 > **Honest caveat up front:** if your Wi-Fi failure is *hardware* (the Wi-Fi
-> IC's solder cracking — “works when cold”), **no kernel can fix it**. These
+> IC's solder cracking — "works when cold"), **no kernel can fix it**. These
 > patches only remove the software-side failure modes (power-save wedges under
-> heat, late thermal mitigation). See `docs/FLASHING.md` §5.
+> heat, late thermal mitigation, HAL-driven thermal throttling). See `docs/FLASHING.md` §5.
 
 > **Ready-made flash set:** images, SHA-256 checksums and the official
 > KernelSU-Next manager APK are attached to the
 > [v1.0.0 release](https://github.com/saltykingpeppermint/pixel8pro-husky-kernel/releases/tag/v1.0.0)
 > — with test instructions for telling a software Wi-Fi drop from a hardware one.
 
-## What's changed (3 patches)
+## What's changed (4 patches)
 
 | Patch | Effect | Where it lands |
 |-------|--------|----------------|
 | KernelSU-Next v3.4.0 built-in | root without an LKM | `boot.img` kernel |
 | Wi-Fi power-save → `PM_OFF` while active (`PM_MAX` on suspend) | no PS-poll dropouts when hot (~100–200 mW idle cost) | `vendor_dlkm` (`bcmdhd4398.ko`) |
+| Wi-Fi/BT fake cooler thermals | forces `DUTY_CYCLE_NONE` (100 %) — shared radio ignores HAL thermal throttling | `vendor_dlkm` (`bcmdhd4398.ko`) |
 | Passive thermal trips −5 °C (safety trips untouched) | cooler peaks (~5 % sustained perf) | `vendor_kernel_boot` packed `dtb` (4 FDTs; `dtbo.img` carries no trips) |
 
 Full rationale + verification details: **`docs/PATCHES.md`**.
@@ -28,7 +29,7 @@ Full rationale + verification details: **`docs/PATCHES.md`**.
 ## Layout
 
 - `docs/PLAN.md` — decisions, incidents, build state
-- `docs/PATCHES.md` — the three patches in detail
+- `docs/PATCHES.md` — the four patches in detail
 - `docs/FLASHING.md` — backups, flash commands, verification, rollback, caveats
 - `scripts/` — sync, integrate, patch, build (monitor + wrapper), verify,
   package helpers (all heavy bash lives in files, never inline)
